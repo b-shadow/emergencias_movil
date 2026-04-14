@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "68107658206",
+    "project_id": "parcial20-f6eb3",
+    "storage_bucket": "parcial20-f6eb3.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:68107658206:android:0cce0e741d47327973b34f",
+        "android_client_info": {
+          "package_name": "com.example.app_emergencias"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyATnbgDnUxunMqpaLiONm94rLzZSbVOJeg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
