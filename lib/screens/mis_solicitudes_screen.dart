@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../models/solicitud.dart';
 import '../services/solicitud_service.dart';
 import 'detalle_solicitud_screen.dart';
+import '../widgets/theme_toggle_button.dart';
 
 class MisSolicitudesScreen extends StatefulWidget {
   const MisSolicitudesScreen({Key? key}) : super(key: key);
@@ -58,16 +59,16 @@ class _MisSolicitudesScreenState extends State<MisSolicitudesScreen> {
     });
   }
 
-  String _obtenerEstadoColor(String estado) {
+  String _obtenerEstadoTexto(String estado) {
     switch (estado) {
       case 'REGISTRADA':
         return 'Registrada';
       case 'EN_BUSQUEDA':
-        return 'En Búsqueda';
+        return 'En búsqueda';
       case 'ASIGNADA':
         return 'Asignada';
       case 'EN_ATENCION':
-        return 'En Atención';
+        return 'En atención';
       case 'ATENDIDA':
         return 'Atendida';
       case 'CANCELADA':
@@ -81,67 +82,79 @@ class _MisSolicitudesScreenState extends State<MisSolicitudesScreen> {
     switch (estado) {
       case 'REGISTRADA':
       case 'EN_BUSQUEDA':
-        return Colors.blue;
+        return const Color(0xFF1D9BF0);
       case 'ASIGNADA':
       case 'EN_ATENCION':
-        return Colors.orange;
+        return const Color(0xFFF59E0B);
       case 'ATENDIDA':
-        return Colors.green;
+        return const Color(0xFF22C55E);
       case 'CANCELADA':
-        return Colors.red;
+        return const Color(0xFFEF4444);
       default:
         return Colors.grey;
     }
   }
 
   String _formatearFecha(DateTime fecha) {
-    final ahora = DateTime.now();
-    final diferencia = ahora.difference(fecha);
-
-    if (diferencia.inMinutes < 60) {
-      return 'Hace ${diferencia.inMinutes} min';
-    } else if (diferencia.inHours < 24) {
-      return 'Hace ${diferencia.inHours} h';
-    } else if (diferencia.inDays < 7) {
-      return 'Hace ${diferencia.inDays} d';
-    } else {
-      return '${fecha.day}/${fecha.month}/${fecha.year}';
-    }
+    return '${fecha.day}/${fecha.month}/${fecha.year}';
   }
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cs = Theme.of(context).colorScheme;
+
     return Scaffold(
+      backgroundColor:
+          isDark ? const Color(0xFF0F1117) : const Color(0xFFF7F8FC),
       appBar: AppBar(
-        title: const Text('Mis Solicitudes de Emergencia'),
-        backgroundColor: Colors.red,
+        title: const Text('Mis Solicitudes'),
+        backgroundColor: const Color(0xFFFF5A5F),
         foregroundColor: Colors.white,
+        actions: const [ThemeToggleButton()],
       ),
       body: Column(
         children: [
-          // Filtro de ordenamiento
-          Padding(
-            padding: const EdgeInsets.all(16),
+          Container(
+            margin: const EdgeInsets.fromLTRB(16, 14, 16, 10),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF181B24) : Colors.white,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: cs.outlineVariant.withOpacity(0.4)),
+            ),
             child: Row(
               children: [
-                const Text('Ordenar por: ', style: TextStyle(fontWeight: FontWeight.w600)),
-                const SizedBox(width: 8),
-                DropdownButton<String>(
-                  value: _ordenamiento,
-                  items: const [
-                    DropdownMenuItem(value: 'reciente', child: Text('Más Reciente')),
-                    DropdownMenuItem(value: 'antiguo', child: Text('Más Antiguo')),
-                  ],
-                  onChanged: (valor) {
-                    if (valor != null) {
-                      _cambiarOrdenamiento(valor);
-                    }
-                  },
+                Text(
+                  'Ordenar por:',
+                  style: TextStyle(
+                    color: cs.onSurface.withOpacity(0.8),
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<String>(
+                      isExpanded: true,
+                      value: _ordenamiento,
+                      items: const [
+                        DropdownMenuItem(
+                            value: 'reciente', child: Text('Más reciente')),
+                        DropdownMenuItem(
+                            value: 'antiguo', child: Text('Más antiguo')),
+                      ],
+                      onChanged: (valor) {
+                        if (valor != null) {
+                          _cambiarOrdenamiento(valor);
+                        }
+                      },
+                    ),
+                  ),
                 ),
               ],
             ),
           ),
-          // Listado de solicitudes
           Expanded(
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator())
@@ -150,11 +163,15 @@ class _MisSolicitudesScreenState extends State<MisSolicitudesScreen> {
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(Icons.inbox, size: 64, color: Colors.grey[300]),
-                            const SizedBox(height: 16),
+                            Icon(Icons.inbox_rounded,
+                                size: 62,
+                                color: cs.onSurface.withOpacity(0.25)),
+                            const SizedBox(height: 14),
                             Text(
                               'No hay solicitudes registradas',
-                              style: TextStyle(color: Colors.grey[600], fontSize: 16),
+                              style: TextStyle(
+                                  color: cs.onSurface.withOpacity(0.65),
+                                  fontSize: 16),
                             ),
                           ],
                         ),
@@ -162,101 +179,143 @@ class _MisSolicitudesScreenState extends State<MisSolicitudesScreen> {
                     : RefreshIndicator(
                         onRefresh: _cargarSolicitudes,
                         child: ListView.builder(
-                          padding: const EdgeInsets.all(8),
+                          padding: const EdgeInsets.fromLTRB(14, 2, 14, 16),
                           itemCount: _solicitudes.length,
                           itemBuilder: (context, index) {
                             final solicitud = _solicitudes[index];
+                            final estadoColor =
+                                _getColorEstado(solicitud.estado);
                             return GestureDetector(
                               onTap: () {
                                 Navigator.push(
                                   context,
                                   MaterialPageRoute(
-                                    builder: (context) => DetalleSolicitudScreen(
+                                    builder: (context) =>
+                                        DetalleSolicitudScreen(
                                       solicitud: solicitud,
                                       onActualizar: _cargarSolicitudes,
                                     ),
                                   ),
                                 );
                               },
-                              child: Card(
-                                margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
-                                child: Padding(
-                                  padding: const EdgeInsets.all(16),
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      // Header: Código y Estado
-                                      Row(
-                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                        children: [
-                                          Text(
+                              child: Container(
+                                margin: const EdgeInsets.only(bottom: 12),
+                                padding: const EdgeInsets.all(16),
+                                decoration: BoxDecoration(
+                                  color: isDark
+                                      ? const Color(0xFF181B24)
+                                      : Colors.white,
+                                  borderRadius: BorderRadius.circular(18),
+                                  border: Border.all(
+                                      color: estadoColor.withOpacity(0.35),
+                                      width: 1.3),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black
+                                          .withOpacity(isDark ? 0.24 : 0.07),
+                                      blurRadius: 12,
+                                      offset: const Offset(0, 5),
+                                    ),
+                                  ],
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: Text(
                                             solicitud.codigoSolicitud,
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.w900,
+                                              fontSize: 29,
+                                              letterSpacing: 0.4,
+                                              color: cs.onSurface,
+                                            ),
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 12,
+                                            vertical: 6,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: estadoColor,
+                                            borderRadius:
+                                                BorderRadius.circular(999),
+                                          ),
+                                          child: Text(
+                                            _obtenerEstadoTexto(
+                                                solicitud.estado),
                                             style: const TextStyle(
-                                              fontWeight: FontWeight.bold,
+                                              color: Colors.white,
+                                              fontWeight: FontWeight.w800,
+                                              fontSize: 12,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 10),
+                                    Row(
+                                      children: [
+                                        Icon(
+                                          Icons.directions_car_outlined,
+                                          color: cs.onSurface.withOpacity(0.7),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: Text(
+                                            solicitud.vehiculo,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: TextStyle(
+                                              color: cs.onSurface
+                                                  .withOpacity(0.78),
                                               fontSize: 16,
                                             ),
                                           ),
-                                          Container(
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 12,
-                                              vertical: 6,
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Row(
+                                          children: [
+                                            Icon(
+                                              Icons.priority_high_rounded,
+                                              size: 18,
+                                              color: solicitud.nivelUrgencia ==
+                                                      'ALTO'
+                                                  ? const Color(0xFFF59E0B)
+                                                  : const Color(0xFF60A5FA),
                                             ),
-                                            decoration: BoxDecoration(
-                                              color: _getColorEstado(solicitud.estado),
-                                              borderRadius: BorderRadius.circular(20),
-                                            ),
-                                            child: Text(
-                                              _obtenerEstadoColor(solicitud.estado),
-                                              style: const TextStyle(
-                                                color: Colors.white,
-                                                fontSize: 12,
-                                                fontWeight: FontWeight.bold,
+                                            const SizedBox(width: 4),
+                                            Text(
+                                              solicitud.nivelUrgencia,
+                                              style: TextStyle(
+                                                color: cs.onSurface
+                                                    .withOpacity(0.75),
+                                                fontWeight: FontWeight.w600,
                                               ),
                                             ),
+                                          ],
+                                        ),
+                                        Text(
+                                          _formatearFecha(
+                                              solicitud.fechaCreacion),
+                                          style: TextStyle(
+                                            color:
+                                                cs.onSurface.withOpacity(0.52),
+                                            fontSize: 12,
                                           ),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 8),
-                                      // Vehículo
-                                      Row(
-                                        children: [
-                                          Icon(Icons.directions_car, size: 18, color: Colors.grey[600]),
-                                          const SizedBox(width: 8),
-                                          Expanded(
-                                            child: Text(
-                                              solicitud.vehiculo,
-                                              style: TextStyle(color: Colors.grey[600]),
-                                              overflow: TextOverflow.ellipsis,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 8),
-                                      // Urgencia y Fecha
-                                      Row(
-                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                        children: [
-                                          Row(
-                                            children: [
-                                              Icon(Icons.priority_high, size: 16, color: Colors.orange),
-                                              const SizedBox(width: 4),
-                                              Text(
-                                                solicitud.nivelUrgencia,
-                                                style: const TextStyle(fontSize: 12),
-                                              ),
-                                            ],
-                                          ),
-                                          Text(
-                                            _formatearFecha(solicitud.fechaCreacion),
-                                            style: TextStyle(
-                                              fontSize: 12,
-                                              color: Colors.grey[500],
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ],
-                                  ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
                                 ),
                               ),
                             );

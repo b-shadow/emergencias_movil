@@ -4,7 +4,7 @@ import '../models/notificacion.dart';
 import 'auth_service.dart';
 
 class NotificacionService {
-  static const String baseUrl = 'https://emergencias-backend.onrender.com/api/v1';
+  static const String baseUrl = String.fromEnvironment('API_BASE_URL', defaultValue: 'https://emergencias-backend.onrender.com/api/v1');
   final AuthService _authService = AuthService();
 
   // Obtener mis notificaciones
@@ -113,3 +113,4 @@ class NotificacionService {
     }
   }
 }
+

@@ -6,6 +6,7 @@ import '../models/postulacion.dart';
 import '../services/solicitud_service.dart';
 import '../services/postulacion_service.dart';
 import 'editar_solicitud_screen.dart';
+import '../widgets/theme_toggle_button.dart';
 
 class DetalleSolicitudScreen extends StatefulWidget {
   final Solicitud solicitud;
@@ -41,7 +42,8 @@ class _DetalleSolicitudScreenState extends State<DetalleSolicitudScreen> {
       context: context,
       builder: (BuildContext context) => AlertDialog(
         title: const Text('Cancelar Solicitud'),
-        content: const Text('¿Estás seguro de que deseas cancelar esta solicitud de emergencia?'),
+        content: const Text(
+            '¿Estás seguro de que deseas cancelar esta solicitud de emergencia?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
@@ -52,7 +54,8 @@ class _DetalleSolicitudScreenState extends State<DetalleSolicitudScreen> {
               Navigator.pop(context);
               await _confirmarCancelacion();
             },
-            child: const Text('Confirmar Cancelación', style: TextStyle(color: Colors.red)),
+            child: const Text('Confirmar Cancelación',
+                style: TextStyle(color: Colors.red)),
           ),
         ],
       ),
@@ -63,7 +66,7 @@ class _DetalleSolicitudScreenState extends State<DetalleSolicitudScreen> {
     try {
       setState(() => _isLoading = true);
       await _solicitudService.cancelarSolicitud(_solicitudActual.idSolicitud);
-      
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -93,7 +96,8 @@ class _DetalleSolicitudScreenState extends State<DetalleSolicitudScreen> {
 
   Future<void> _recargarDetalle() async {
     try {
-      final solicitud = await _solicitudService.obtenerDetalleSolicitud(_solicitudActual.idSolicitud);
+      final solicitud = await _solicitudService
+          .obtenerDetalleSolicitud(_solicitudActual.idSolicitud);
       setState(() => _solicitudActual = solicitud);
       await _cargarPostulaciones();
       widget.onActualizar();
@@ -108,11 +112,12 @@ class _DetalleSolicitudScreenState extends State<DetalleSolicitudScreen> {
 
   Future<void> _cargarPostulaciones() async {
     if (!mounted) return;
-    
+
     try {
       setState(() => _cargandoPostulaciones = true);
-      final postulaciones = await _postulacionService.obtenerPostulacionesSolicitud(_solicitudActual.idSolicitud);
-      
+      final postulaciones = await _postulacionService
+          .obtenerPostulacionesSolicitud(_solicitudActual.idSolicitud);
+
       if (mounted) {
         setState(() {
           _postulaciones = postulaciones;
@@ -133,14 +138,14 @@ class _DetalleSolicitudScreenState extends State<DetalleSolicitudScreen> {
     switch (estado) {
       case 'REGISTRADA':
       case 'EN_BUSQUEDA':
-        return Colors.blue;
+        return const Color(0xFF1D9BF0);
       case 'ASIGNADA':
       case 'EN_ATENCION':
-        return Colors.orange;
+        return const Color(0xFFF59E0B);
       case 'ATENDIDA':
-        return Colors.green;
+        return const Color(0xFF22C55E);
       case 'CANCELADA':
-        return Colors.red;
+        return const Color(0xFFEF4444);
       default:
         return Colors.grey;
     }
@@ -181,7 +186,8 @@ class _DetalleSolicitudScreenState extends State<DetalleSolicitudScreen> {
               Navigator.pop(context);
               await _confirmarAceptacion(postulacion);
             },
-            child: const Text('Confirmar', style: TextStyle(color: Colors.blue)),
+            child:
+                const Text('Confirmar', style: TextStyle(color: Colors.blue)),
           ),
         ],
       ),
@@ -191,9 +197,9 @@ class _DetalleSolicitudScreenState extends State<DetalleSolicitudScreen> {
   Future<void> _confirmarAceptacion(Postulacion postulacion) async {
     try {
       setState(() => _isLoading = true);
-      
+
       await _postulacionService.aceptarPostulacion(postulacion.idPostulacion);
-      
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -202,28 +208,28 @@ class _DetalleSolicitudScreenState extends State<DetalleSolicitudScreen> {
                 const Icon(Icons.check_circle, color: Colors.white),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: Text('Taller ${postulacion.nombreTaller} seleccionado exitosamente'),
+                  child: Text(
+                      'Taller ${postulacion.nombreTaller} seleccionado exitosamente'),
                 ),
               ],
             ),
             backgroundColor: Colors.green,
           ),
         );
-        
-        // Recargar solicitud para actualizar estado
+
         await _recargarDetalle();
       }
     } catch (e) {
       if (mounted) {
         String mensaje = 'Error al seleccionar taller: $e';
-        
-        // Manejo específico de errores
+
         if (e.toString().contains('E1:')) {
-          mensaje = 'No hay talleres disponibles. Intenta ampliar la zona de búsqueda.';
+          mensaje =
+              'No hay talleres disponibles. Intenta ampliar la zona de búsqueda.';
         } else if (e.toString().contains('E2:')) {
           mensaje = 'La solicitud ya cuenta con un taller asignado.';
         }
-        
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(mensaje),
@@ -238,11 +244,18 @@ class _DetalleSolicitudScreenState extends State<DetalleSolicitudScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cs = Theme.of(context).colorScheme;
+    final estadoColor = _getColorEstado(_solicitudActual.estado);
+
     return Scaffold(
+      backgroundColor:
+          isDark ? const Color(0xFF0F1117) : const Color(0xFFF6F7FB),
       appBar: AppBar(
         title: const Text('Detalle de Solicitud'),
-        backgroundColor: Colors.red,
+        backgroundColor: const Color(0xFFFF5A5F),
         foregroundColor: Colors.white,
+        actions: const [ThemeToggleButton()],
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
@@ -251,104 +264,127 @@ class _DetalleSolicitudScreenState extends State<DetalleSolicitudScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Card principal con información
-                  Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          // Código y Estado
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Column(
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: isDark ? const Color(0xFF181B24) : Colors.white,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                          color: estadoColor.withOpacity(0.45), width: 1.4),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(isDark ? 0.25 : 0.07),
+                          blurRadius: 14,
+                          offset: const Offset(0, 5),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(
+                              child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  const Text(
+                                  Text(
                                     'Código de Solicitud',
                                     style: TextStyle(
                                       fontSize: 12,
-                                      color: Colors.grey,
+                                      color: cs.onSurface.withOpacity(0.62),
                                     ),
                                   ),
+                                  const SizedBox(height: 6),
                                   Text(
                                     _solicitudActual.codigoSolicitud,
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 18,
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w900,
+                                      fontSize: 34,
+                                      color: cs.onSurface,
+                                      letterSpacing: 0.4,
                                     ),
+                                    overflow: TextOverflow.ellipsis,
                                   ),
                                 ],
                               ),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 8,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: _getColorEstado(_solicitudActual.estado),
-                                  borderRadius: BorderRadius.circular(20),
-                                ),
-                                child: Text(
-                                  _solicitudActual.estado,
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.bold,
-                                  ),
+                            ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 12, vertical: 7),
+                              decoration: BoxDecoration(
+                                color: estadoColor,
+                                borderRadius: BorderRadius.circular(999),
+                              ),
+                              child: Text(
+                                _solicitudActual.estado,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 12,
                                 ),
                               ),
-                            ],
-                          ),
-                          const SizedBox(height: 16),
-                          const Divider(),
-                          const SizedBox(height: 16),
-                          // Vehículo
-                          _buildInfoRow('Vehículo', _solicitudActual.vehiculo, Icons.directions_car),
-                          const SizedBox(height: 12),
-                          // Urgencia
-                          _buildInfoRow('Nivel de Urgencia', _solicitudActual.nivelUrgencia, Icons.priority_high),
-                          const SizedBox(height: 12),
-                          // Categoría
-                          _buildInfoRow('Categoría', _solicitudActual.categoria ?? 'No especificada', Icons.warning_amber),
-                          const SizedBox(height: 12),
-                          // Radio de búsqueda
-                          _buildInfoRow('Radio de Búsqueda', '${_solicitudActual.radioEstadio.toStringAsFixed(1)} km', Icons.adjust),
-                          const SizedBox(height: 12),
-                          // Ubicación con Mapa
-                          if (_solicitudActual.latitud != null && _solicitudActual.longitud != null)
-                            _buildMapWidget(_solicitudActual.latitud!, _solicitudActual.longitud!)
-                          else
-                            _buildInfoRow(
-                              'Ubicación',
-                              'Sin coordenadas disponibles',
-                              Icons.location_on,
                             ),
-                          const SizedBox(height: 12),
-                          // Especialidades
-                          _buildListaRow('Especialidades Necesarias', _solicitudActual.especialidadesRequeridas),
-                          const SizedBox(height: 12),
-                          // Servicios
-                          _buildListaRow('Servicios Necesarios', _solicitudActual.serviciosRequeridos),
-                          const SizedBox(height: 12),
-                          // Descripción
-                          _buildDescripcionRow('Descripción', _solicitudActual.descripcion),
-                        ],
-                      ),
+                          ],
+                        ),
+                        const SizedBox(height: 14),
+                        Divider(color: cs.outlineVariant.withOpacity(0.45)),
+                        const SizedBox(height: 14),
+                        _buildInfoRow('Vehículo', _solicitudActual.vehiculo,
+                            Icons.directions_car),
+                        _buildInfoRow(
+                          'Nivel de Urgencia',
+                          _solicitudActual.nivelUrgencia,
+                          Icons.priority_high,
+                        ),
+                        _buildInfoRow(
+                          'Categoría',
+                          _solicitudActual.categoria ?? 'No especificada',
+                          Icons.warning_amber,
+                        ),
+                        _buildInfoRow(
+                          'Radio de Búsqueda',
+                          '${_solicitudActual.radioEstadio.toStringAsFixed(1)} km',
+                          Icons.radar,
+                        ),
+                        if (_solicitudActual.latitud != null &&
+                            _solicitudActual.longitud != null)
+                          _buildMapWidget(_solicitudActual.latitud!,
+                              _solicitudActual.longitud!)
+                        else
+                          _buildInfoRow(
+                            'Ubicación',
+                            'Sin coordenadas disponibles',
+                            Icons.location_on,
+                          ),
+                        const SizedBox(height: 14),
+                        _buildListaRow('Especialidades Necesarias',
+                            _solicitudActual.especialidadesRequeridas),
+                        const SizedBox(height: 12),
+                        _buildListaRow('Servicios Necesarios',
+                            _solicitudActual.serviciosRequeridos),
+                        const SizedBox(height: 12),
+                        _buildDescripcionRow(
+                            'Descripción', _solicitudActual.descripcion),
+                      ],
                     ),
                   ),
-                  const SizedBox(height: 24),
-                  // Sección de acciones según estado
+                  const SizedBox(height: 20),
                   if (_puedeEditar() || _puedeCancelar()) ...[
-                    const Text(
+                    Text(
                       'Acciones',
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                      style: TextStyle(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 18,
+                        color: cs.onSurface,
+                      ),
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 10),
                     if (_puedeEditar()) ...[
                       SizedBox(
                         width: double.infinity,
-                        child: ElevatedButton(
+                        child: ElevatedButton.icon(
                           onPressed: () {
                             Navigator.push(
                               context,
@@ -360,73 +396,70 @@ class _DetalleSolicitudScreenState extends State<DetalleSolicitudScreen> {
                               ),
                             );
                           },
+                          icon: const Icon(Icons.edit),
+                          label: const Text('Editar Solicitud'),
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.blue,
+                            backgroundColor: const Color(0xFF2563EB),
                             foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                          ),
-                          child: const Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.edit),
-                              SizedBox(width: 8),
-                              Text('Editar Solicitud'),
-                            ],
+                            padding: const EdgeInsets.symmetric(vertical: 13),
                           ),
                         ),
                       ),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 10),
                     ],
                     if (_puedeCancelar())
                       SizedBox(
                         width: double.infinity,
-                        child: ElevatedButton(
+                        child: ElevatedButton.icon(
                           onPressed: _cancelarSolicitud,
+                          icon: const Icon(Icons.cancel),
+                          label: const Text('Cancelar Solicitud'),
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.red,
+                            backgroundColor: const Color(0xFFEF4444),
                             foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                          ),
-                          child: const Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.cancel),
-                              SizedBox(width: 8),
-                              Text('Cancelar Solicitud'),
-                            ],
+                            padding: const EdgeInsets.symmetric(vertical: 13),
                           ),
                         ),
                       ),
                   ],
-                  // Mostrar talleres postulados si existen y solicitud está activa
                   if (_solicitudActual.estado != 'CANCELADA' &&
                       _solicitudActual.estado != 'ATENDIDA') ...[
-                    const SizedBox(height: 12),
-                    const Text(
+                    const SizedBox(height: 20),
+                    Text(
                       'Talleres Postulados',
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                      style: TextStyle(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 18,
+                        color: cs.onSurface,
+                      ),
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 10),
                     if (_cargandoPostulaciones)
-                      const Center(
-                        child: CircularProgressIndicator(),
-                      )
+                      const Center(child: CircularProgressIndicator())
                     else if (_postulaciones.isEmpty)
-                      const Card(
-                        color: Colors.blue,
-                        child: Padding(
-                          padding: EdgeInsets.all(16),
-                          child: Column(
-                            children: [
-                              Icon(Icons.info, color: Colors.white),
-                              SizedBox(height: 8),
-                              Text(
-                                'Los talleres que respondan a tu solicitud aparecerán aquí',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(color: Colors.white),
-                              ),
-                            ],
-                          ),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: isDark
+                              ? const Color(0xFF12203A)
+                              : const Color(0xFFEAF2FF),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(
+                              color: const Color(0xFF60A5FA).withOpacity(0.4)),
+                        ),
+                        child: Column(
+                          children: [
+                            const Icon(Icons.info_outline,
+                                color: Color(0xFF2563EB)),
+                            const SizedBox(height: 8),
+                            Text(
+                              'Los talleres que respondan a tu solicitud aparecerán aquí',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                  color: cs.onSurface.withOpacity(0.78)),
+                            ),
+                          ],
                         ),
                       )
                     else
@@ -436,87 +469,94 @@ class _DetalleSolicitudScreenState extends State<DetalleSolicitudScreen> {
                         itemCount: _postulaciones.length,
                         itemBuilder: (context, index) {
                           final postulacion = _postulaciones[index];
-                          return Card(
+                          return Container(
                             margin: const EdgeInsets.only(bottom: 12),
-                            child: Padding(
-                              padding: const EdgeInsets.all(16),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      Expanded(
-                                        child: Text(
-                                          postulacion.nombreTaller,
-                                          style: const TextStyle(
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 16,
-                                          ),
-                                          overflow: TextOverflow.ellipsis,
+                            padding: const EdgeInsets.all(14),
+                            decoration: BoxDecoration(
+                              color: isDark
+                                  ? const Color(0xFF181B24)
+                                  : Colors.white,
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(
+                                color: cs.outlineVariant.withOpacity(0.35),
+                              ),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        postulacion.nombreTaller,
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w800,
+                                          fontSize: 16,
+                                          color: cs.onSurface,
                                         ),
-                                      ),
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 12,
-                                          vertical: 6,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: Colors.blue.shade100,
-                                          borderRadius: BorderRadius.circular(20),
-                                        ),
-                                        child: Text(
-                                          '${postulacion.tiempoEstimadoMin} min',
-                                          style: TextStyle(
-                                            color: Colors.blue.shade900,
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 12,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 8),
-                                  if (postulacion.mensajePropuesta != null)
-                                    Text(
-                                      postulacion.mensajePropuesta!,
-                                      style: const TextStyle(
-                                        fontSize: 14,
-                                        color: Colors.grey,
+                                        overflow: TextOverflow.ellipsis,
                                       ),
                                     ),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 10,
+                                        vertical: 5,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFDBEAFE),
+                                        borderRadius:
+                                            BorderRadius.circular(999),
+                                      ),
+                                      child: Text(
+                                        '${postulacion.tiempoEstimadoMin} min',
+                                        style: const TextStyle(
+                                          color: Color(0xFF1D4ED8),
+                                          fontWeight: FontWeight.w800,
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                if (postulacion.mensajePropuesta != null) ...[
                                   const SizedBox(height: 8),
                                   Text(
-                                    'Postulado: ${postulacion.fechaPostulacion.toString().split('.')[0]}',
-                                    style: const TextStyle(
-                                      fontSize: 12,
-                                      color: Colors.grey,
+                                    postulacion.mensajePropuesta!,
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      color: cs.onSurface.withOpacity(0.72),
                                     ),
                                   ),
-                                  if (_puedeSeleccionarTaller()) ...[
-                                    const SizedBox(height: 12),
-                                    SizedBox(
-                                      width: double.infinity,
-                                      child: ElevatedButton(
-                                        onPressed: () => _aceptarPostulacion(postulacion),
-                                        style: ElevatedButton.styleFrom(
-                                          backgroundColor: Colors.blue,
-                                          foregroundColor: Colors.white,
-                                          padding: const EdgeInsets.symmetric(vertical: 10),
-                                        ),
-                                        child: const Row(
-                                          mainAxisAlignment: MainAxisAlignment.center,
-                                          children: [
-                                            Icon(Icons.check_circle, size: 18),
-                                            SizedBox(width: 8),
-                                            Text('Seleccionar Taller'),
-                                          ],
-                                        ),
+                                ],
+                                const SizedBox(height: 8),
+                                Text(
+                                  'Postulado: ${postulacion.fechaPostulacion.toString().split('.')[0]}',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: cs.onSurface.withOpacity(0.58),
+                                  ),
+                                ),
+                                if (_puedeSeleccionarTaller()) ...[
+                                  const SizedBox(height: 10),
+                                  SizedBox(
+                                    width: double.infinity,
+                                    child: ElevatedButton.icon(
+                                      onPressed: () =>
+                                          _aceptarPostulacion(postulacion),
+                                      icon: const Icon(Icons.check_circle,
+                                          size: 18),
+                                      label: const Text('Seleccionar Taller'),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor:
+                                            const Color(0xFF2563EB),
+                                        foregroundColor: Colors.white,
+                                        padding: const EdgeInsets.symmetric(
+                                            vertical: 11),
                                       ),
                                     ),
-                                  ]
+                                  ),
                                 ],
-                              ),
+                              ],
                             ),
                           );
                         },
@@ -530,32 +570,44 @@ class _DetalleSolicitudScreenState extends State<DetalleSolicitudScreen> {
   }
 
   Widget _buildInfoRow(String label, String value, IconData icon) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Icon(icon, color: Colors.red, size: 20),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                label,
-                style: const TextStyle(fontSize: 12, color: Colors.grey),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                value,
-                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
-              ),
-            ],
+    final cs = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: const Color(0xFFFF5A5F), size: 20),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: TextStyle(
+                      fontSize: 12, color: cs.onSurface.withOpacity(0.62)),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  value,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 15,
+                    color: cs.onSurface,
+                  ),
+                ),
+              ],
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
   Widget _buildListaRow(String label, List<String> items) {
+    final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -563,31 +615,44 @@ class _DetalleSolicitudScreenState extends State<DetalleSolicitudScreen> {
           children: [
             Icon(
               label.contains('Especialidades') ? Icons.business : Icons.build,
-              color: Colors.red,
+              color: const Color(0xFFFF5A5F),
               size: 20,
             ),
             const SizedBox(width: 12),
             Text(
               label,
-              style: const TextStyle(fontSize: 12, color: Colors.grey),
+              style:
+                  TextStyle(fontSize: 13, color: cs.onSurface.withOpacity(0.7)),
             ),
           ],
         ),
         const SizedBox(height: 8),
         if (items.isEmpty)
-          const Text(
+          Text(
             'Sin seleccionar',
-            style: TextStyle(color: Colors.grey, fontStyle: FontStyle.italic),
+            style: TextStyle(
+                color: cs.onSurface.withOpacity(0.52),
+                fontStyle: FontStyle.italic),
           )
         else
           Wrap(
             spacing: 8,
+            runSpacing: 8,
             children: items
                 .map(
                   (item) => Chip(
                     label: Text(item),
-                    backgroundColor: Colors.blue[100],
-                    labelStyle: const TextStyle(fontSize: 12),
+                    backgroundColor: isDark
+                        ? const Color(0xFF173A60)
+                        : const Color(0xFFE8F1FF),
+                    side: BorderSide.none,
+                    labelStyle: TextStyle(
+                      fontSize: 12,
+                      color: isDark
+                          ? const Color(0xFFB7D6FF)
+                          : const Color(0xFF1D4ED8),
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 )
                 .toList(),
@@ -597,16 +662,20 @@ class _DetalleSolicitudScreenState extends State<DetalleSolicitudScreen> {
   }
 
   Widget _buildDescripcionRow(String label, String? value) {
+    final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           children: [
-            const Icon(Icons.description, color: Colors.red, size: 20),
+            const Icon(Icons.description, color: Color(0xFFFF5A5F), size: 20),
             const SizedBox(width: 12),
             Text(
               label,
-              style: const TextStyle(fontSize: 12, color: Colors.grey),
+              style:
+                  TextStyle(fontSize: 13, color: cs.onSurface.withOpacity(0.7)),
             ),
           ],
         ),
@@ -615,14 +684,16 @@ class _DetalleSolicitudScreenState extends State<DetalleSolicitudScreen> {
           width: double.infinity,
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: Colors.grey[100],
-            borderRadius: BorderRadius.circular(8),
+            color: isDark ? const Color(0xFF0F1320) : const Color(0xFFF8F9FC),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: cs.outlineVariant.withOpacity(0.35)),
           ),
           child: Text(
             value ?? 'Sin descripción',
             style: TextStyle(
               fontSize: 13,
-              color: value != null ? Colors.black : Colors.grey,
+              color:
+                  value != null ? cs.onSurface : cs.onSurface.withOpacity(0.52),
             ),
           ),
         ),
@@ -631,23 +702,25 @@ class _DetalleSolicitudScreenState extends State<DetalleSolicitudScreen> {
   }
 
   Widget _buildMapWidget(double latitude, double longitude) {
+    final cs = Theme.of(context).colorScheme;
     final LatLng location = LatLng(latitude, longitude);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           children: [
-            const Icon(Icons.location_on, color: Colors.red, size: 20),
+            const Icon(Icons.location_on, color: Color(0xFFFF5A5F), size: 20),
             const SizedBox(width: 12),
-            const Text(
+            Text(
               'Ubicación',
-              style: TextStyle(fontSize: 12, color: Colors.grey),
+              style:
+                  TextStyle(fontSize: 13, color: cs.onSurface.withOpacity(0.7)),
             ),
           ],
         ),
         const SizedBox(height: 8),
         ClipRRect(
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(10),
           child: SizedBox(
             height: 250,
             child: FlutterMap(
@@ -664,9 +737,9 @@ class _DetalleSolicitudScreenState extends State<DetalleSolicitudScreen> {
                   circles: [
                     CircleMarker(
                       point: location,
-                      radius: _solicitudActual.radioEstadio * 1000, // Radio en metros
+                      radius: _solicitudActual.radioEstadio * 1000,
                       useRadiusInMeter: true,
-                      color: Colors.blue.withOpacity(0.3),
+                      color: Colors.blue.withOpacity(0.24),
                       borderColor: Colors.blue,
                       borderStrokeWidth: 2,
                     ),
@@ -676,20 +749,16 @@ class _DetalleSolicitudScreenState extends State<DetalleSolicitudScreen> {
                   markers: [
                     Marker(
                       point: location,
-                      width: 40,
-                      height: 40,
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Container(
-                            decoration: const BoxDecoration(
-                              color: Colors.red,
-                              shape: BoxShape.circle,
-                            ),
-                            padding: const EdgeInsets.all(8),
-                            child: const Icon(Icons.location_on, color: Colors.white, size: 24),
-                          ),
-                        ],
+                      width: 44,
+                      height: 44,
+                      child: Container(
+                        decoration: const BoxDecoration(
+                          color: Color(0xFFFF5A5F),
+                          shape: BoxShape.circle,
+                        ),
+                        padding: const EdgeInsets.all(8),
+                        child: const Icon(Icons.location_on,
+                            color: Colors.white, size: 24),
                       ),
                     ),
                   ],
@@ -701,7 +770,7 @@ class _DetalleSolicitudScreenState extends State<DetalleSolicitudScreen> {
         const SizedBox(height: 8),
         Text(
           'Lat: ${latitude.toStringAsFixed(4)} | Lng: ${longitude.toStringAsFixed(4)}',
-          style: const TextStyle(fontSize: 11, color: Colors.grey),
+          style: TextStyle(fontSize: 11, color: cs.onSurface.withOpacity(0.56)),
         ),
       ],
     );

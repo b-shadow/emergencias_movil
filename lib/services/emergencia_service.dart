@@ -1,9 +1,24 @@
+import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'auth_service.dart';
 
 class EmergenciaService {
-  static const String baseUrl = 'https://emergencias-backend.onrender.com/api/v1';
+  static const String baseUrl = String.fromEnvironment('API_BASE_URL',
+      defaultValue: 'https://emergencias-backend.onrender.com/api/v1');
+  static const int visionTimeoutSeconds = int.fromEnvironment(
+    'VISION_TIMEOUT_SECONDS',
+    defaultValue: 90,
+  );
+  static const String visionServiceUrl = String.fromEnvironment(
+    'VISION_SERVICE_URL',
+    defaultValue: 'http://10.0.2.2:8001',
+  );
+  static const String visionServiceToken = String.fromEnvironment(
+    'VISION_SERVICE_TOKEN',
+    defaultValue: '',
+  );
   final AuthService _authService = AuthService();
 
   // Crear solicitud de emergencia
@@ -21,7 +36,7 @@ class EmergenciaService {
   }) async {
     try {
       final headers = await _authService.getAuthHeaders();
-      
+
       final body = {
         'codigo_solicitud': codigoSolicitud,
         'descripcion_texto': descripcion,
@@ -39,11 +54,13 @@ class EmergenciaService {
         body['categoria_incidente'] = categoria;
       }
 
-      final response = await http.post(
-        Uri.parse('$baseUrl/solicitudes_emergencia'),
-        headers: headers,
-        body: jsonEncode(body),
-      ).timeout(const Duration(seconds: 15));
+      final response = await http
+          .post(
+            Uri.parse('$baseUrl/solicitudes_emergencia'),
+            headers: headers,
+            body: jsonEncode(body),
+          )
+          .timeout(const Duration(seconds: 15));
 
       if (response.statusCode == 201 || response.statusCode == 200) {
         return jsonDecode(response.body);
@@ -64,11 +81,13 @@ class EmergenciaService {
   Future<List<Map<String, dynamic>>> getSolicitudes() async {
     try {
       final headers = await _authService.getAuthHeaders();
-      
-      final response = await http.get(
-        Uri.parse('$baseUrl/clientes/emergencias'),
-        headers: headers,
-      ).timeout(const Duration(seconds: 10));
+
+      final response = await http
+          .get(
+            Uri.parse('$baseUrl/clientes/emergencias'),
+            headers: headers,
+          )
+          .timeout(const Duration(seconds: 10));
 
       if (response.statusCode == 200) {
         final List<dynamic> data = jsonDecode(response.body);
@@ -85,11 +104,13 @@ class EmergenciaService {
   Future<void> cancelarSolicitud(String idSolicitud) async {
     try {
       final headers = await _authService.getAuthHeaders();
-      
-      final response = await http.post(
-        Uri.parse('$baseUrl/clientes/emergencia/$idSolicitud/cancelar'),
-        headers: headers,
-      ).timeout(const Duration(seconds: 10));
+
+      final response = await http
+          .post(
+            Uri.parse('$baseUrl/clientes/emergencia/$idSolicitud/cancelar'),
+            headers: headers,
+          )
+          .timeout(const Duration(seconds: 10));
 
       if (response.statusCode != 200 && response.statusCode != 204) {
         throw Exception('Error al cancelar solicitud');
@@ -102,5 +123,186 @@ class EmergenciaService {
   // Convertir imagen a base64 para enviar al backend
   static String imageToBase64(List<int> imageBytes) {
     return base64Encode(imageBytes);
+  }
+
+  // Procesar imagen de incidente contra microservicio IA
+  Future<Map<String, dynamic>> procesarImagenIncidente({
+    File? imagenArchivo,
+    List<int>? imagenBytes,
+    String? fileName,
+    String? evidenciaId,
+  }) async {
+    try {
+      if (imagenArchivo == null &&
+          (imagenBytes == null || imagenBytes.isEmpty)) {
+        throw Exception('Debes enviar un archivo o bytes de imagen');
+      }
+
+      final request = http.MultipartRequest(
+        'POST',
+        Uri.parse('$visionServiceUrl/predict/image'),
+      );
+
+      if (visionServiceToken.isNotEmpty) {
+        request.headers['X-Service-Token'] = visionServiceToken;
+      }
+
+      if (evidenciaId != null && evidenciaId.isNotEmpty) {
+        request.fields['evidencia_id'] = evidenciaId;
+      }
+
+      if (imagenArchivo != null) {
+        request.files.add(
+          await http.MultipartFile.fromPath('image', imagenArchivo.path),
+        );
+      } else {
+        request.files.add(
+          http.MultipartFile.fromBytes(
+            'image',
+            imagenBytes!,
+            filename: fileName ?? 'evidencia.jpg',
+          ),
+        );
+      }
+
+      final streamedResponse = await request.send().timeout(
+            Duration(seconds: visionTimeoutSeconds),
+          );
+      final response = await http.Response.fromStream(streamedResponse);
+
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body) as Map<String, dynamic>;
+      }
+
+      String detail = 'Error al procesar imagen: ${response.statusCode}';
+      try {
+        final decoded = jsonDecode(response.body);
+        if (decoded is Map<String, dynamic> && decoded['detail'] != null) {
+          detail = decoded['detail'].toString();
+        }
+      } catch (_) {}
+      throw Exception(detail);
+    } on TimeoutException {
+      throw Exception(
+        'Tiempo de espera agotado al procesar con IA (${visionTimeoutSeconds}s)',
+      );
+    } catch (e) {
+      throw Exception('No se pudo procesar la imagen con IA: $e');
+    }
+  }
+
+  // Procesar descripción del problema con IA (backend -> Groq)
+  Future<Map<String, dynamic>> procesarProblemaTexto({
+    required String textoProblema,
+  }) async {
+    try {
+      final headers = await _authService.getAuthHeaders();
+      final response = await http
+          .post(
+            Uri.parse(
+                '$baseUrl/solicitudes_emergencia/tools/procesar-problema'),
+            headers: headers,
+            body: jsonEncode({
+              'texto': textoProblema,
+            }),
+          )
+          .timeout(const Duration(seconds: 35));
+
+      final decoded = jsonDecode(response.body);
+      if (response.statusCode == 200) {
+        if (decoded is Map<String, dynamic> && decoded['success'] == true) {
+          return (decoded['data'] ?? {}) as Map<String, dynamic>;
+        }
+        throw Exception(decoded['error'] ?? 'No se pudo procesar el problema');
+      }
+
+      throw Exception(
+        decoded is Map<String, dynamic>
+            ? (decoded['detail'] ??
+                decoded['error'] ??
+                'Error ${response.statusCode}')
+            : 'Error ${response.statusCode}',
+      );
+    } on TimeoutException {
+      throw Exception('Tiempo de espera agotado al procesar el problema');
+    } catch (e) {
+      throw Exception('No se pudo procesar el problema con IA: $e');
+    }
+  }
+
+  // Subir/reemplazar imagen de evidencia para una solicitud
+  Future<Map<String, dynamic>> subirImagenEvidenciaSolicitud({
+    required String solicitudId,
+    required File imagenArchivo,
+    String? descripcion,
+  }) async {
+    try {
+      final token = await _authService.getStoredToken();
+      if (token == null || token.isEmpty) {
+        throw Exception('Sesión expirada. Inicia sesión nuevamente.');
+      }
+
+      final request = http.MultipartRequest(
+        'POST',
+        Uri.parse(
+            '$baseUrl/solicitudes_emergencia/$solicitudId/evidencias/imagen'),
+      );
+
+      request.headers['Authorization'] = 'Bearer $token';
+      if (descripcion != null && descripcion.trim().isNotEmpty) {
+        request.fields['descripcion'] = descripcion.trim();
+      }
+
+      request.files.add(
+        await http.MultipartFile.fromPath('archivo', imagenArchivo.path),
+      );
+
+      final streamedResponse =
+          await request.send().timeout(const Duration(seconds: 35));
+      final response = await http.Response.fromStream(streamedResponse);
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        return jsonDecode(response.body) as Map<String, dynamic>;
+      }
+
+      String detail = 'Error subiendo evidencia: ${response.statusCode}';
+      try {
+        final decoded = jsonDecode(response.body);
+        if (decoded is Map<String, dynamic> && decoded['detail'] != null) {
+          detail = decoded['detail'].toString();
+        }
+      } catch (_) {}
+      throw Exception(detail);
+    } catch (e) {
+      throw Exception('No se pudo subir la imagen de evidencia: $e');
+    }
+  }
+
+  // Obtener evidencias de una solicitud
+  Future<List<Map<String, dynamic>>> obtenerEvidenciasSolicitud(
+      String solicitudId) async {
+    try {
+      final headers = await _authService.getAuthHeaders();
+      final response = await http
+          .get(
+            Uri.parse(
+                '$baseUrl/solicitudes_emergencia/$solicitudId/evidencias'),
+            headers: headers,
+          )
+          .timeout(const Duration(seconds: 15));
+
+      if (response.statusCode == 200) {
+        final List<dynamic> data = jsonDecode(response.body);
+        return data.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+      }
+
+      if (response.statusCode == 401) {
+        throw Exception('Sesión expirada. Inicia sesión nuevamente.');
+      }
+
+      throw Exception('Error al obtener evidencias: ${response.statusCode}');
+    } catch (e) {
+      throw Exception('No se pudo obtener evidencias: $e');
+    }
   }
 }

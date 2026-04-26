@@ -1,23 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_messaging/firebase_messaging.dart';
 import 'screens/login_screen.dart';
-import 'services/dispositivo_push_service.dart';
 import 'services/auth_service.dart';
 import 'screens/dashboard_screen.dart';
 import 'firebase_options.dart';
-
-/// Handler para mensajes FCM en background (app minimizada o terminada)
-@pragma('vm:entry-point')
-Future<void> _firebaseBackgroundMessageHandler(RemoteMessage message) async {
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
-  
-  print('[FCM-BG] Mensaje en background: ${message.notification?.title}');
-  print('[FCM-BG] Body: ${message.notification?.body}');
-  print('[FCM-BG] Data: ${message.data}');
-}
+import 'theme/theme_controller.dart';
+import 'services/dispositivo_push_service_stub.dart'
+    if (dart.library.io) 'services/dispositivo_push_service.dart';
+import 'services/push_setup_stub.dart'
+    if (dart.library.io) 'services/push_setup_mobile.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -27,8 +18,8 @@ void main() async {
     options: DefaultFirebaseOptions.currentPlatform,
   );
   
-  // 2. Registrar background message handler
-  FirebaseMessaging.onBackgroundMessage(_firebaseBackgroundMessageHandler);
+  // 2. Registrar background message handler (solo plataformas moviles)
+  await configurePushBackgroundHandler();
   
   print('[MAIN] Aplicación inicializada');
   
@@ -40,14 +31,29 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      title: 'App de Emergencias',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.redAccent),
-        useMaterial3: true,
-      ),
-      home: const _SessionValidator(),
+    return ValueListenableBuilder<ThemeMode>(
+      valueListenable: AppThemeController.themeMode,
+      builder: (context, mode, _) {
+        return MaterialApp(
+          debugShowCheckedModeBanner: false,
+          title: 'App de Emergencias',
+          themeMode: mode,
+          theme: ThemeData(
+            brightness: Brightness.light,
+            colorScheme: ColorScheme.fromSeed(seedColor: Colors.redAccent),
+            useMaterial3: true,
+          ),
+          darkTheme: ThemeData(
+            brightness: Brightness.dark,
+            colorScheme: ColorScheme.fromSeed(
+              seedColor: Colors.redAccent,
+              brightness: Brightness.dark,
+            ),
+            useMaterial3: true,
+          ),
+          home: const _SessionValidator(),
+        );
+      },
     );
   }
 }

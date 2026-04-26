@@ -10,7 +10,7 @@ import 'dart:async';
 import 'auth_service.dart';
 
 class DispositivoPushService {
-  static const String baseUrl = 'https://emergencias-backend.onrender.com/api/v1';
+  static const String baseUrl = String.fromEnvironment('API_BASE_URL', defaultValue: 'https://emergencias-backend.onrender.com/api/v1');
   final AuthService _authService = AuthService();
   final FirebaseMessaging _firebaseMessaging = FirebaseMessaging.instance;
   final DeviceInfoPlugin _deviceInfo = DeviceInfoPlugin();
@@ -384,3 +384,4 @@ class DispositivoPushService {
     }
   }
 }
+

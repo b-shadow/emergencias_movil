@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/vehiculo_service.dart';
+import '../widgets/theme_toggle_button.dart';
 
 class CreateVehiculoScreen extends StatefulWidget {
   const CreateVehiculoScreen({Key? key}) : super(key: key);
@@ -78,6 +79,9 @@ class _CreateVehiculoScreenState extends State<CreateVehiculoScreen> {
       appBar: AppBar(
         title: const Text('Agregar Vehículo'),
         backgroundColor: const Color(0xFF6B46C1),
+        actions: const [
+          ThemeToggleButton(),
+        ],
       ),
       body: Form(
         key: _formKey,

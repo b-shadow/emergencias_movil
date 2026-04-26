@@ -66,5 +66,11 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>NSCameraUsageDescription</key>
+	<string>Esta aplicacion necesita camara para registrar evidencias de la emergencia.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Esta aplicacion necesita acceso a galeria para adjuntar evidencias de la emergencia.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Esta aplicacion necesita microfono para capturar descripcion por voz.</string>
 </dict>
 </plist>

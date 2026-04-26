@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/cliente_service.dart';
+import '../widgets/theme_toggle_button.dart';
 
 class EditarPerfilScreen extends StatefulWidget {
   const EditarPerfilScreen({Key? key}) : super(key: key);
@@ -128,60 +129,68 @@ class _EditarPerfilScreenState extends State<EditarPerfilScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bgColor = isDark ? const Color(0xFF0F1117) : const Color(0xFFF6F7FB);
+
     if (_isLoading) {
       return Scaffold(
+        backgroundColor: bgColor,
         appBar: AppBar(
           title: const Text('Editar Mi Perfil'),
           backgroundColor: const Color(0xFF6B46C1),
+          foregroundColor: Colors.white,
+          actions: const [ThemeToggleButton()],
         ),
-        body: const Center(
-          child: CircularProgressIndicator(),
-        ),
+        body: const Center(child: CircularProgressIndicator()),
       );
     }
 
     if (_error != null) {
       return Scaffold(
+        backgroundColor: bgColor,
         appBar: AppBar(
           title: const Text('Editar Mi Perfil'),
           backgroundColor: const Color(0xFF6B46C1),
+          foregroundColor: Colors.white,
+          actions: const [ThemeToggleButton()],
         ),
         body: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(_error!),
-              const SizedBox(height: 16),
-              ElevatedButton(
-                onPressed: _cargarPerfil,
-                child: const Text('Reintentar'),
-              ),
-            ],
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(_error!, textAlign: TextAlign.center),
+                const SizedBox(height: 16),
+                ElevatedButton(
+                  onPressed: _cargarPerfil,
+                  child: const Text('Reintentar'),
+                ),
+              ],
+            ),
           ),
         ),
       );
     }
 
     return Scaffold(
+      backgroundColor: bgColor,
       appBar: AppBar(
         title: const Text('Editar Mi Perfil'),
         backgroundColor: const Color(0xFF6B46C1),
+        foregroundColor: Colors.white,
+        actions: const [ThemeToggleButton()],
       ),
       body: Form(
         key: _formKey,
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.fromLTRB(16, 14, 16, 24),
           child: Column(
             children: [
-              TextFormField(
+              _buildInputCard(
+                icon: Icons.person,
+                label: 'Nombre *',
                 controller: _nombreController,
-                decoration: InputDecoration(
-                  labelText: 'Nombre *',
-                  prefixIcon: const Icon(Icons.person),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
                 validator: (value) {
                   if (value == null || value.isEmpty) {
                     return 'El nombre es requerido';
@@ -192,16 +201,11 @@ class _EditarPerfilScreenState extends State<EditarPerfilScreen> {
                   return null;
                 },
               ),
-              const SizedBox(height: 16),
-              TextFormField(
+              const SizedBox(height: 12),
+              _buildInputCard(
+                icon: Icons.person_outline,
+                label: 'Apellido *',
                 controller: _apellidoController,
-                decoration: InputDecoration(
-                  labelText: 'Apellido *',
-                  prefixIcon: const Icon(Icons.person),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
                 validator: (value) {
                   if (value == null || value.isEmpty) {
                     return 'El apellido es requerido';
@@ -212,90 +216,114 @@ class _EditarPerfilScreenState extends State<EditarPerfilScreen> {
                   return null;
                 },
               ),
-              const SizedBox(height: 16),
-              TextFormField(
+              const SizedBox(height: 12),
+              _buildInputCard(
+                icon: Icons.email_outlined,
+                label: 'Correo',
                 controller: _correoController,
-                decoration: InputDecoration(
-                  labelText: 'Correo',
-                  prefixIcon: const Icon(Icons.email),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
                 readOnly: true,
               ),
-              const SizedBox(height: 16),
-              TextFormField(
+              const SizedBox(height: 12),
+              _buildInputCard(
+                icon: Icons.phone_outlined,
+                label: 'Teléfono',
+                hintText: 'Ej: +591 1234567',
                 controller: _telefonoController,
-                decoration: InputDecoration(
-                  labelText: 'Teléfono',
-                  hintText: 'Ej: +591 1234567',
-                  prefixIcon: const Icon(Icons.phone),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
+                keyboardType: TextInputType.phone,
               ),
-              const SizedBox(height: 16),
-              TextFormField(
+              const SizedBox(height: 12),
+              _buildInputCard(
+                icon: Icons.badge_outlined,
+                label: 'Cédula de Identidad',
+                hintText: 'Ej: 1234567',
                 controller: _ciController,
-                decoration: InputDecoration(
-                  labelText: 'Cédula de Identidad',
-                  hintText: 'Ej: 1234567',
-                  prefixIcon: const Icon(Icons.badge),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
               ),
-              const SizedBox(height: 16),
-              TextFormField(
+              const SizedBox(height: 12),
+              _buildInputCard(
+                icon: Icons.location_on_outlined,
+                label: 'Dirección',
+                hintText: 'Ej: Calle Principal 123, Apto 4',
                 controller: _direccionController,
-                decoration: InputDecoration(
-                  labelText: 'Dirección',
-                  hintText: 'Ej: Calle Principal 123, Apto 4',
-                  prefixIcon: const Icon(Icons.location_on),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
                 maxLines: 2,
               ),
-              const SizedBox(height: 32),
+              const SizedBox(height: 22),
               SizedBox(
                 width: double.infinity,
-                height: 48,
+                height: 52,
                 child: ElevatedButton(
                   onPressed: _isSaving ? null : _guardarCambios,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF6B46C1),
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
+                      borderRadius: BorderRadius.circular(14),
                     ),
                   ),
                   child: _isSaving
                       ? const SizedBox(
-                          height: 24,
-                          width: 24,
+                          height: 22,
+                          width: 22,
                           child: CircularProgressIndicator(
                             strokeWidth: 2,
-                            valueColor: AlwaysStoppedAnimation<Color>(
-                              Colors.white,
-                            ),
+                            valueColor:
+                                AlwaysStoppedAnimation<Color>(Colors.white),
                           ),
                         )
                       : const Text(
                           'Guardar Cambios',
                           style: TextStyle(
                             color: Colors.white,
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
+                            fontSize: 17,
+                            fontWeight: FontWeight.w700,
                           ),
                         ),
                 ),
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildInputCard({
+    required IconData icon,
+    required String label,
+    required TextEditingController controller,
+    String? hintText,
+    bool readOnly = false,
+    int maxLines = 1,
+    TextInputType? keyboardType,
+    String? Function(String?)? validator,
+  }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cs = Theme.of(context).colorScheme;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF181B24) : Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: cs.outlineVariant.withOpacity(0.45)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(isDark ? 0.22 : 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: TextFormField(
+        controller: controller,
+        readOnly: readOnly,
+        maxLines: maxLines,
+        keyboardType: keyboardType,
+        validator: validator,
+        style: TextStyle(color: cs.onSurface, fontWeight: FontWeight.w600),
+        decoration: InputDecoration(
+          labelText: label,
+          hintText: hintText,
+          prefixIcon: Icon(icon),
+          border: InputBorder.none,
         ),
       ),
     );

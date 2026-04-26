@@ -4,7 +4,7 @@ import '../models/solicitud.dart';
 import 'auth_service.dart';
 
 class SolicitudService {
-  static const String baseUrl = 'https://emergencias-backend.onrender.com/api/v1';
+  static const String baseUrl = String.fromEnvironment('API_BASE_URL', defaultValue: 'https://emergencias-backend.onrender.com/api/v1');
   final AuthService _authService = AuthService();
 
   // Obtener todas las solicitudes del usuario
@@ -155,3 +155,4 @@ class SolicitudService {
     }
   }
 }
+

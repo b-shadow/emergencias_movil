@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'dashboard_screen.dart';
 import 'register_cliente_screen.dart';
+import 'forgot_password_screen.dart';
 import '../services/auth_service.dart';
-import '../services/dispositivo_push_service.dart';
+import '../services/dispositivo_push_service_stub.dart'
+    if (dart.library.io) '../services/dispositivo_push_service.dart';
+import '../widgets/theme_toggle_button.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -12,7 +15,6 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  // Controladores para capturar el texto que escriba el usuario
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   final AuthService _authService = AuthService();
@@ -22,108 +24,197 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final colorScheme = Theme.of(context).colorScheme;
+
     return Scaffold(
-      backgroundColor: Colors.white,
-      body: SafeArea(
-        child: Center(
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: isDark
+                ? const [Color(0xFF050A16), Color(0xFF0A1529), Color(0xFF0F1E34)]
+                : const [Color(0xFFF7F8FC), Color(0xFFF1F2F7)],
+          ),
+        ),
+        child: SafeArea(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 30.0),
+            padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
             child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                // Logo de la aplicación
-                const Icon(Icons.car_repair, size: 100, color: Colors.redAccent),
+                const Align(
+                  alignment: Alignment.topRight,
+                  child: ThemeToggleButton(),
+                ),
+                const SizedBox(height: 8),
+                Container(
+                  width: 96,
+                  height: 96,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFF5A5F),
+                    borderRadius: BorderRadius.circular(26),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFFFF5A5F).withOpacity(0.35),
+                        blurRadius: 24,
+                        offset: const Offset(0, 10),
+                      ),
+                    ],
+                  ),
+                  child: const Icon(Icons.car_repair, color: Colors.white, size: 46),
+                ),
                 const SizedBox(height: 20),
-                const Text(
+                Text(
                   'Asistencia Vehicular',
-                  style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.black87),
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 42,
+                    height: 1,
+                    fontWeight: FontWeight.w800,
+                    color: isDark ? Colors.white : const Color(0xFF111827),
+                  ),
                 ),
-                const Text(
+                const SizedBox(height: 14),
+                Text(
                   'Ingresa para solicitar auxilio',
-                  style: TextStyle(fontSize: 16, color: Colors.grey),
-                ),
-                const SizedBox(height: 40),
-
-                // Campo de Correo
-                TextFormField(
-                  controller: _emailController,
-                  keyboardType: TextInputType.emailAddress,
-                  decoration: InputDecoration(
-                    labelText: 'Correo Electrónico',
-                    prefixIcon: const Icon(Icons.email_outlined),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  style: TextStyle(
+                    fontSize: 17,
+                    color: isDark ? Colors.white70 : const Color(0xFF6B7280),
                   ),
                 ),
-                const SizedBox(height: 20),
-
-                // Campo de Contraseña
-                TextFormField(
-                  controller: _passwordController,
-                  obscureText: _ocultarPassword,
-                  decoration: InputDecoration(
-                    labelText: 'Contraseña',
-                    prefixIcon: const Icon(Icons.lock_outline),
-                    suffixIcon: IconButton(
-                      icon: Icon(_ocultarPassword ? Icons.visibility_off : Icons.visibility),
-                      onPressed: () {
-                        setState(() {
-                          _ocultarPassword = !_ocultarPassword;
-                        });
-                      },
-                    ),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
-                ),
-                
-                // Olvidé mi contraseña (CU-04)
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: TextButton(
-                    onPressed: () => print('Ir a recuperar contraseña'),
-                    child: const Text('¿Olvidaste tu contraseña?', style: TextStyle(color: Colors.redAccent)),
-                  ),
-                ),
-                const SizedBox(height: 20),
-
-                // Botón de Ingresar
-                SizedBox(
+                const SizedBox(height: 28),
+                Container(
                   width: double.infinity,
-                  height: 50,
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.redAccent,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      disabledBackgroundColor: Colors.red[300],
+                  padding: const EdgeInsets.fromLTRB(16, 20, 16, 18),
+                  decoration: BoxDecoration(
+                    color: isDark
+                        ? const Color(0xFF0D1628).withOpacity(0.92)
+                        : Colors.white.withOpacity(0.92),
+                    borderRadius: BorderRadius.circular(24),
+                    border: Border.all(
+                      color: isDark ? Colors.white10 : const Color(0xFFE5E7EB),
                     ),
-                    onPressed: _isLoading ? null : _handleLogin,
-                    child: _isLoading
-                        ? const SizedBox(
-                            height: 24,
-                            width: 24,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(isDark ? 0.38 : 0.08),
+                        blurRadius: 24,
+                        offset: const Offset(0, 10),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    children: [
+                      _buildInputField(
+                        context: context,
+                        controller: _emailController,
+                        label: 'Correo electrónico',
+                        icon: Icons.email_outlined,
+                        keyboardType: TextInputType.emailAddress,
+                      ),
+                      const SizedBox(height: 14),
+                      _buildInputField(
+                        context: context,
+                        controller: _passwordController,
+                        label: 'Contraseña',
+                        icon: Icons.lock_outline,
+                        obscureText: _ocultarPassword,
+                        suffixIcon: IconButton(
+                          icon: Icon(
+                            _ocultarPassword ? Icons.visibility_off : Icons.visibility,
+                          ),
+                          onPressed: () {
+                            setState(() {
+                              _ocultarPassword = !_ocultarPassword;
+                            });
+                          },
+                        ),
+                      ),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: TextButton(
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => const ForgotPasswordScreen(),
+                              ),
+                            );
+                          },
+                          child: const Text(
+                            '¿Olvidaste tu contraseña?',
+                            style: TextStyle(
+                              color: Color(0xFFFF5A5F),
+                              fontWeight: FontWeight.w600,
                             ),
-                          )
-                        : const Text('INGRESAR', style: TextStyle(fontSize: 16, color: Colors.white, fontWeight: FontWeight.bold)),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 56,
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFFFF4D57),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            disabledBackgroundColor:
+                                const Color(0xFFFF4D57).withOpacity(0.55),
+                          ),
+                          onPressed: _isLoading ? null : _handleLogin,
+                          child: _isLoading
+                              ? const SizedBox(
+                                  height: 24,
+                                  width: 24,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    valueColor:
+                                        AlwaysStoppedAnimation<Color>(Colors.white),
+                                  ),
+                                )
+                              : const Text(
+                                  'INGRESAR',
+                                  style: TextStyle(
+                                    fontSize: 17,
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                
-                const SizedBox(height: 20),
-                
-                // Registrarse (CU-02)
+                const SizedBox(height: 22),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Text('¿No tienes cuenta?'),
+                    Text(
+                      '¿No tienes cuenta?',
+                      style: TextStyle(
+                        color: colorScheme.onSurface.withOpacity(0.75),
+                        fontSize: 16,
+                      ),
+                    ),
                     TextButton(
                       onPressed: () {
                         Navigator.push(
                           context,
-                          MaterialPageRoute(builder: (context) => const RegisterClienteScreen()),
+                          MaterialPageRoute(
+                            builder: (context) => const RegisterClienteScreen(),
+                          ),
                         );
                       },
-                      child: const Text('Regístrate', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
+                      child: const Text(
+                        'Regístrate',
+                        style: TextStyle(
+                          color: Color(0xFFFF5A5F),
+                          fontWeight: FontWeight.w700,
+                          fontSize: 16,
+                        ),
+                      ),
                     ),
                   ],
                 ),
@@ -135,14 +226,56 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
+  Widget _buildInputField({
+    required BuildContext context,
+    required TextEditingController controller,
+    required String label,
+    required IconData icon,
+    TextInputType keyboardType = TextInputType.text,
+    bool obscureText = false,
+    Widget? suffixIcon,
+  }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return TextFormField(
+      controller: controller,
+      keyboardType: keyboardType,
+      obscureText: obscureText,
+      style: TextStyle(color: isDark ? Colors.white : const Color(0xFF111827)),
+      decoration: InputDecoration(
+        labelText: label,
+        labelStyle: TextStyle(
+          color: isDark ? Colors.white70 : const Color(0xFF6B7280),
+        ),
+        prefixIcon: Icon(icon, color: const Color(0xFFFF5A5F)),
+        suffixIcon: suffixIcon,
+        filled: true,
+        fillColor: isDark ? const Color(0xFF111C31) : const Color(0xFFF9FAFB),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide(
+            color: isDark ? Colors.white12 : const Color(0xFFE5E7EB),
+          ),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide(
+            color: isDark ? Colors.white12 : const Color(0xFFE5E7EB),
+          ),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: const BorderSide(color: Color(0xFFFF5A5F), width: 1.6),
+        ),
+      ),
+    );
+  }
+
   Future<void> _handleLogin() async {
-    // Validar campos
     if (_emailController.text.isEmpty || _passwordController.text.isEmpty) {
       _showErrorSnackBar('Por favor completa todos los campos');
       return;
     }
 
-    // Validar formato de email
     if (!_isValidEmail(_emailController.text)) {
       _showErrorSnackBar('Por favor ingresa un correo válido');
       return;
@@ -159,12 +292,9 @@ class _LoginScreenState extends State<LoginScreen> {
       );
 
       if (mounted) {
-        // 1. Inicializar push (configura listeners + registra token)
         await _dispositivoPushService.initForAuthenticatedUser();
-        
-        // 2. Navegar al dashboard
         _showSuccessSnackBar('¡Bienvenido ${tokenResponse.nombreCompleto}!');
-        
+
         if (mounted) {
           Navigator.pushReplacement(
             context,

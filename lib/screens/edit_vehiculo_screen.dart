@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/vehiculo.dart';
 import '../services/vehiculo_service.dart';
+import '../widgets/theme_toggle_button.dart';
 
 class EditVehiculoScreen extends StatefulWidget {
   final Vehiculo vehiculo;
@@ -95,6 +96,9 @@ class _EditVehiculoScreenState extends State<EditVehiculoScreen> {
       appBar: AppBar(
         title: const Text('Editar Vehículo'),
         backgroundColor: const Color(0xFF6B46C1),
+        actions: const [
+          ThemeToggleButton(),
+        ],
       ),
       body: Form(
         key: _formKey,

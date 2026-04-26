@@ -4,7 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/user.dart';
 
 class AuthService {
-  static const String baseUrl = 'https://emergencias-backend.onrender.com/api/v1';
+  static const String baseUrl = String.fromEnvironment('API_BASE_URL', defaultValue: 'https://emergencias-backend.onrender.com/api/v1');
 
   Future<TokenResponse> login(String correo, String contrasena) async {
     try {
@@ -46,6 +46,32 @@ class AuthService {
       }
     } on http.ClientException catch (e) {
       throw Exception('Error de conexión: ${e.message}. Verifica tu conexión a internet.');
+    } catch (e) {
+      throw Exception('Error: $e');
+    }
+  }
+
+  Future<Map<String, dynamic>> forgotPassword(String correo) async {
+    try {
+      final response = await http
+          .post(
+            Uri.parse('$baseUrl/auth/forgot-password'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({'correo': correo}),
+          )
+          .timeout(
+            const Duration(seconds: 12),
+            onTimeout: () {
+              throw Exception('Tiempo de conexion agotado.');
+            },
+          );
+
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body) as Map<String, dynamic>;
+      }
+
+      final errorData = jsonDecode(response.body);
+      throw Exception(errorData['detail'] ?? 'No se pudo enviar la solicitud.');
     } catch (e) {
       throw Exception('Error: $e');
     }
@@ -243,3 +269,4 @@ class AuthService {
     }
   }
 }
+

@@ -1,6 +1,7 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
 import 'login_screen.dart';
+import '../widgets/theme_toggle_button.dart';
 
 class RegisterClienteScreen extends StatefulWidget {
   const RegisterClienteScreen({super.key});
@@ -28,8 +29,8 @@ class _RegisterClienteScreenState extends State<RegisterClienteScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Scaffold(
-      backgroundColor: Colors.white,
       appBar: AppBar(
         backgroundColor: Colors.redAccent,
         title: const Text(
@@ -41,20 +42,30 @@ class _RegisterClienteScreenState extends State<RegisterClienteScreen> {
           icon: const Icon(Icons.arrow_back, color: Colors.white),
           onPressed: () => Navigator.pop(context),
         ),
+        actions: const [
+          ThemeToggleButton(),
+        ],
       ),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 16.0),
           child: Column(
             children: [
-              const Text(
+              Text(
                 'Crea tu cuenta',
-                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.black87),
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                  color: colorScheme.onSurface,
+                ),
               ),
               const SizedBox(height: 8),
-              const Text(
+              Text(
                 'Completa tus datos para registrarte como cliente',
-                style: TextStyle(fontSize: 14, color: Colors.grey),
+                style: TextStyle(
+                  fontSize: 14,
+                  color: colorScheme.onSurface.withOpacity(0.65),
+                ),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 30),
@@ -201,7 +212,10 @@ class _RegisterClienteScreenState extends State<RegisterClienteScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Text('¿Ya tienes cuenta?'),
+                  Text(
+                    '¿Ya tienes cuenta?',
+                    style: TextStyle(color: colorScheme.onSurface.withOpacity(0.75)),
+                  ),
                   TextButton(
                     onPressed: () => Navigator.pop(context),
                     child: const Text('Inicia sesión', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
@@ -213,7 +227,10 @@ class _RegisterClienteScreenState extends State<RegisterClienteScreen> {
               // Términos y condiciones
               Text(
                 '* Campos obligatorios\n\nAl registrarte aceptas nuestros Términos y Condiciones',
-                style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                style: TextStyle(
+                  fontSize: 12,
+                  color: colorScheme.onSurface.withOpacity(0.65),
+                ),
                 textAlign: TextAlign.center,
               ),
             ],
@@ -370,3 +387,5 @@ class _RegisterClienteScreenState extends State<RegisterClienteScreen> {
     super.dispose();
   }
 }
+
+

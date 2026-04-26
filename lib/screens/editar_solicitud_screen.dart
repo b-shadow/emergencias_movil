@@ -2,9 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
+import 'package:image_picker/image_picker.dart';
+import 'dart:io';
 import '../models/solicitud.dart';
 import '../services/solicitud_service.dart';
 import '../services/api_service.dart';
+import '../services/emergencia_service.dart';
+import '../widgets/theme_toggle_button.dart';
 
 class EditarSolicitudScreen extends StatefulWidget {
   final Solicitud solicitud;
@@ -22,8 +26,16 @@ class EditarSolicitudScreen extends StatefulWidget {
 
 class _EditarSolicitudScreenState extends State<EditarSolicitudScreen> {
   final SolicitudService _solicitudService = SolicitudService();
+  final EmergenciaService _emergenciaService = EmergenciaService();
   final ApiService _apiService = ApiService();
   final _formKey = GlobalKey<FormState>();
+  static const Set<String> _categoriasDisponibles = {
+    'COLISION_VISIBLE',
+    'HUMO_O_SOBRECALENTAMIENTO',
+    'PINCHAZO_LLANTA',
+    'SIN_HALLAZGOS_CLAROS',
+    'VEHICULO_INMOVILIZADO',
+  };
 
   late TextEditingController _descripcionController;
   late TextEditingController _latitudController;
@@ -47,24 +59,34 @@ class _EditarSolicitudScreenState extends State<EditarSolicitudScreen> {
   Set<String> _serviciosSeleccionados = {};
   bool _loadingEspecialidades = true;
   bool _loadingServicios = true;
+  File? _fotoTomada;
+  String? _fotoUrlActual;
+  bool _isProcessingImage = false;
+  bool _isProcessingProblem = false;
+  final ImagePicker _imagePicker = ImagePicker();
 
   @override
   void initState() {
     super.initState();
     _mapController = MapController();
-    
+
     // Pre-llenar con datos existentes
-    _descripcionController = TextEditingController(text: widget.solicitud.descripcion);
-    _latitudController = TextEditingController(text: widget.solicitud.latitud?.toString() ?? '');
-    _longitudController = TextEditingController(text: widget.solicitud.longitud?.toString() ?? '');
-    
+    _descripcionController =
+        TextEditingController(text: widget.solicitud.descripcion);
+    _latitudController =
+        TextEditingController(text: widget.solicitud.latitud?.toString() ?? '');
+    _longitudController = TextEditingController(
+        text: widget.solicitud.longitud?.toString() ?? '');
+
     _nivelUrgencia = widget.solicitud.nivelUrgencia;
     _categoria = widget.solicitud.categoria;
     _radioEstadio = widget.solicitud.radioEstadio;
     _latitud = widget.solicitud.latitud ?? -17.7693;
     _longitud = widget.solicitud.longitud ?? -63.1078;
-    _especialidadesSeleccionadas = Set<String>.from(widget.solicitud.especialidadesRequeridas);
-    _serviciosSeleccionados = Set<String>.from(widget.solicitud.serviciosRequeridos);
+    _especialidadesSeleccionadas =
+        Set<String>.from(widget.solicitud.especialidadesRequeridas);
+    _serviciosSeleccionados =
+        Set<String>.from(widget.solicitud.serviciosRequeridos);
 
     // Speech-to-text
     _speechToText = stt.SpeechToText();
@@ -73,6 +95,7 @@ class _EditarSolicitudScreenState extends State<EditarSolicitudScreen> {
     Future.delayed(const Duration(milliseconds: 100), () {
       _cargarEspecialidades();
       _cargarServicios();
+      _cargarEvidenciaActual();
     });
   }
 
@@ -97,9 +120,9 @@ class _EditarSolicitudScreenState extends State<EditarSolicitudScreen> {
         setState(() {
           _especialidades = List<Map<String, dynamic>>.from(
             (data as List).map((e) => {
-              'id_especialidad': e['id_especialidad'],
-              'nombre_especialidad': e['nombre_especialidad'],
-            }),
+                  'id_especialidad': e['id_especialidad'],
+                  'nombre_especialidad': e['nombre_especialidad'],
+                }),
           );
           _loadingEspecialidades = false;
         });
@@ -120,9 +143,9 @@ class _EditarSolicitudScreenState extends State<EditarSolicitudScreen> {
         setState(() {
           _servicios = List<Map<String, dynamic>>.from(
             (data as List).map((s) => {
-              'id_servicio': s['id_servicio'],
-              'nombre_servicio': s['nombre_servicio'],
-            }),
+                  'id_servicio': s['id_servicio'],
+                  'nombre_servicio': s['nombre_servicio'],
+                }),
           );
           _loadingServicios = false;
         });
@@ -136,6 +159,230 @@ class _EditarSolicitudScreenState extends State<EditarSolicitudScreen> {
     }
   }
 
+  Future<void> _cargarEvidenciaActual() async {
+    try {
+      final evidencias = await _emergenciaService
+          .obtenerEvidenciasSolicitud(widget.solicitud.idSolicitud);
+      final primeraImagen = evidencias.firstWhere(
+        (e) => (e['tipo_evidencia'] ?? '').toString().toUpperCase() == 'IMAGEN',
+        orElse: () => <String, dynamic>{},
+      );
+      if (!mounted) return;
+      setState(() {
+        _fotoUrlActual = (primeraImagen['url_archivo'] ?? '').toString().trim();
+        if (_fotoUrlActual!.isEmpty) {
+          _fotoUrlActual = null;
+        }
+      });
+    } catch (_) {
+      // no bloquea edición si no hay evidencia
+    }
+  }
+
+  String _categoriaLegible(String categoria) {
+    return categoria
+        .toLowerCase()
+        .replaceAll('_', ' ')
+        .split(' ')
+        .map((palabra) => palabra.isEmpty
+            ? ''
+            : '${palabra[0].toUpperCase()}${palabra.substring(1)}')
+        .join(' ');
+  }
+
+  Future<void> _tomarFoto() async {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) => AlertDialog(
+        title: const Text('Seleccionar Foto'),
+        content: const Text('¿De dónde deseas seleccionar la foto?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancelar'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _capturarConCamara();
+            },
+            child: const Text('Cámara'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _seleccionarDelGaleria();
+            },
+            child: const Text('Galería'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _capturarConCamara() async {
+    try {
+      final XFile? photo = await _imagePicker.pickImage(
+        source: ImageSource.camera,
+        imageQuality: 75,
+        maxWidth: 1280,
+      );
+      if (photo != null && mounted) {
+        setState(() {
+          _fotoTomada = File(photo.path);
+        });
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error al acceder a la cámara: $e')),
+      );
+    }
+  }
+
+  Future<void> _seleccionarDelGaleria() async {
+    try {
+      final XFile? photo = await _imagePicker.pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 75,
+        maxWidth: 1280,
+      );
+      if (photo != null && mounted) {
+        setState(() {
+          _fotoTomada = File(photo.path);
+        });
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error al acceder a la galería: $e')),
+      );
+    }
+  }
+
+  Future<void> _procesarFotoConIA() async {
+    if (_fotoTomada == null || _isProcessingImage) return;
+
+    setState(() {
+      _isProcessingImage = true;
+    });
+
+    try {
+      final resultado = await _emergenciaService.procesarImagenIncidente(
+        imagenArchivo: _fotoTomada!,
+        evidenciaId: widget.solicitud.idSolicitud,
+      );
+
+      final clasePredicha =
+          (resultado['clase_predicha'] ?? '').toString().trim();
+      final confianza = resultado['confianza'];
+      final confianzaTexto =
+          confianza is num ? ' (${(confianza * 100).toStringAsFixed(1)}%)' : '';
+
+      if (clasePredicha.isNotEmpty) {
+        final categoriaNormalizada = clasePredicha.toUpperCase();
+        if (_categoriasDisponibles.contains(categoriaNormalizada)) {
+          setState(() {
+            _categoria = categoriaNormalizada;
+          });
+        }
+      }
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Se detectó ${clasePredicha.toLowerCase()}$confianzaTexto',
+          ),
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: const Color(0xFF2F9E44),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('No se pudo procesar la imagen: $e'),
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: const Color(0xFFC92A2A),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isProcessingImage = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _procesarProblemaConIA() async {
+    final texto = _descripcionController.text.trim();
+    if (texto.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Primero describe el problema para poder analizarlo'),
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: Color(0xFFC92A2A),
+        ),
+      );
+      return;
+    }
+
+    if (_isProcessingProblem) return;
+
+    setState(() {
+      _isProcessingProblem = true;
+    });
+
+    try {
+      final result = await _emergenciaService.procesarProblemaTexto(
+        textoProblema: texto,
+      );
+      final nivel =
+          (result['nivel_urgencia'] ?? '').toString().toUpperCase().trim();
+      const nivelesValidos = {'BAJO', 'MEDIO', 'ALTO', 'CRITICO'};
+
+      if (nivelesValidos.contains(nivel)) {
+        setState(() {
+          _nivelUrgencia = nivel;
+        });
+      }
+
+      final mensajeChatbot =
+          (result['mensaje_chatbot'] ?? '').toString().trim();
+      final accion = (result['accion_recomendada'] ?? '').toString().trim();
+      final mensajeFinal = mensajeChatbot.isNotEmpty
+          ? (accion.isNotEmpty ? '$mensajeChatbot\n$accion' : mensajeChatbot)
+          : 'Procesamiento completado. Nivel sugerido: $nivel';
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(mensajeFinal),
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: const Color(0xFF0B7285),
+          duration: const Duration(seconds: 6),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('No se pudo procesar el problema: $e'),
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: const Color(0xFFC92A2A),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isProcessingProblem = false;
+        });
+      }
+    }
+  }
+
   Future<void> _guardarCambios() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -144,13 +391,15 @@ class _EditarSolicitudScreenState extends State<EditarSolicitudScreen> {
     try {
       // Mapear nombres de especialidades a IDs
       final idEspecialidades = _especialidades
-          .where((esp) => _especialidadesSeleccionadas.contains(esp['nombre_especialidad']))
+          .where((esp) =>
+              _especialidadesSeleccionadas.contains(esp['nombre_especialidad']))
           .map((esp) => esp['id_especialidad'] as String)
           .toList();
 
       // Mapear nombres de servicios a IDs
       final idServicios = _servicios
-          .where((serv) => _serviciosSeleccionados.contains(serv['nombre_servicio']))
+          .where((serv) =>
+              _serviciosSeleccionados.contains(serv['nombre_servicio']))
           .map((serv) => serv['id_servicio'] as String)
           .toList();
 
@@ -163,6 +412,14 @@ class _EditarSolicitudScreenState extends State<EditarSolicitudScreen> {
         idEspecialidades: idEspecialidades,
         idServicios: idServicios,
       );
+
+      if (_fotoTomada != null) {
+        await _emergenciaService.subirImagenEvidenciaSolicitud(
+          solicitudId: widget.solicitud.idSolicitud,
+          imagenArchivo: _fotoTomada!,
+          descripcion: 'Evidencia actualizada desde edición de solicitud',
+        );
+      }
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -236,6 +493,9 @@ class _EditarSolicitudScreenState extends State<EditarSolicitudScreen> {
         backgroundColor: Colors.redAccent,
         title: const Text('Editar Solicitud'),
         elevation: 0,
+        actions: const [
+          ThemeToggleButton(),
+        ],
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
@@ -253,12 +513,14 @@ class _EditarSolicitudScreenState extends State<EditarSolicitudScreen> {
                     children: [
                       Text(
                         'Código: ${widget.solicitud.codigoSolicitud}',
-                        style: const TextStyle(fontSize: 12, color: Colors.grey),
+                        style:
+                            const TextStyle(fontSize: 12, color: Colors.grey),
                       ),
                       const SizedBox(height: 4),
                       Text(
                         'Estado: ${widget.solicitud.estado}',
-                        style: const TextStyle(fontSize: 12, color: Colors.grey),
+                        style:
+                            const TextStyle(fontSize: 12, color: Colors.grey),
                       ),
                     ],
                   ),
@@ -283,13 +545,16 @@ class _EditarSolicitudScreenState extends State<EditarSolicitudScreen> {
                   children: _especialidades
                       .map((esp) => FilterChip(
                             label: Text(esp['nombre_especialidad']),
-                            selected: _especialidadesSeleccionadas.contains(esp['nombre_especialidad']),
+                            selected: _especialidadesSeleccionadas
+                                .contains(esp['nombre_especialidad']),
                             onSelected: (selected) {
                               setState(() {
                                 if (selected) {
-                                  _especialidadesSeleccionadas.add(esp['nombre_especialidad']);
+                                  _especialidadesSeleccionadas
+                                      .add(esp['nombre_especialidad']);
                                 } else {
-                                  _especialidadesSeleccionadas.remove(esp['nombre_especialidad']);
+                                  _especialidadesSeleccionadas
+                                      .remove(esp['nombre_especialidad']);
                                 }
                               });
                             },
@@ -315,13 +580,16 @@ class _EditarSolicitudScreenState extends State<EditarSolicitudScreen> {
                   children: _servicios
                       .map((serv) => FilterChip(
                             label: Text(serv['nombre_servicio']),
-                            selected: _serviciosSeleccionados.contains(serv['nombre_servicio']),
+                            selected: _serviciosSeleccionados
+                                .contains(serv['nombre_servicio']),
                             onSelected: (selected) {
                               setState(() {
                                 if (selected) {
-                                  _serviciosSeleccionados.add(serv['nombre_servicio']);
+                                  _serviciosSeleccionados
+                                      .add(serv['nombre_servicio']);
                                 } else {
-                                  _serviciosSeleccionados.remove(serv['nombre_servicio']);
+                                  _serviciosSeleccionados
+                                      .remove(serv['nombre_servicio']);
                                 }
                               });
                             },
@@ -349,7 +617,8 @@ class _EditarSolicitudScreenState extends State<EditarSolicitudScreen> {
                         prefixIcon: const Icon(Icons.description),
                       ),
                       maxLines: 3,
-                      validator: (value) => value?.isEmpty ?? true ? 'Requerido' : null,
+                      validator: (value) =>
+                          value?.isEmpty ?? true ? 'Requerido' : null,
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -357,7 +626,8 @@ class _EditarSolicitudScreenState extends State<EditarSolicitudScreen> {
                     children: [
                       FloatingActionButton(
                         mini: true,
-                        backgroundColor: _isListeningAudio ? Colors.red : Colors.blue,
+                        backgroundColor:
+                            _isListeningAudio ? Colors.red : Colors.blue,
                         onPressed: _toggleAudioTranscription,
                         child: Icon(
                           _isListeningAudio ? Icons.stop : Icons.mic,
@@ -372,6 +642,36 @@ class _EditarSolicitudScreenState extends State<EditarSolicitudScreen> {
                     ],
                   ),
                 ],
+              ),
+              const SizedBox(height: 10),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed:
+                      _isProcessingProblem ? null : _procesarProblemaConIA,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF0B7285),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  icon: _isProcessingProblem
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor:
+                                AlwaysStoppedAnimation<Color>(Colors.white),
+                          ),
+                        )
+                      : const Icon(Icons.auto_awesome),
+                  label: Text(_isProcessingProblem
+                      ? 'Procesando problema...'
+                      : 'Procesar problema con IA'),
+                ),
               ),
               const SizedBox(height: 16),
 
@@ -389,9 +689,11 @@ class _EditarSolicitudScreenState extends State<EditarSolicitudScreen> {
                           child: Text(nivel),
                         ))
                     .toList(),
-                onChanged: (value) => setState(() => _nivelUrgencia = value ?? 'MEDIO'),
+                onChanged: (value) =>
+                    setState(() => _nivelUrgencia = value ?? 'MEDIO'),
                 decoration: InputDecoration(
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8)),
                   prefixIcon: const Icon(Icons.priority_high),
                 ),
               ),
@@ -412,12 +714,109 @@ class _EditarSolicitudScreenState extends State<EditarSolicitudScreen> {
                   'SIN_HALLAZGOS_CLAROS',
                   'VEHICULO_INMOVILIZADO'
                 ]
-                    .map((cat) => DropdownMenuItem(value: cat, child: Text(cat)))
+                    .map(
+                        (cat) => DropdownMenuItem(value: cat, child: Text(cat)))
                     .toList(),
                 onChanged: (value) => setState(() => _categoria = value),
                 decoration: InputDecoration(
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8)),
                   prefixIcon: const Icon(Icons.warning_amber),
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.blue, width: 2),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    ElevatedButton.icon(
+                      onPressed: _tomarFoto,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF339AF0),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                      ),
+                      icon: const Icon(Icons.camera_alt),
+                      label: const Text('Tomar o Seleccionar Foto'),
+                    ),
+                    const SizedBox(height: 10),
+                    if (_fotoTomada != null || _fotoUrlActual != null)
+                      Row(
+                        children: [
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: _fotoTomada != null
+                                ? Image.file(
+                                    _fotoTomada!,
+                                    width: 84,
+                                    height: 84,
+                                    fit: BoxFit.cover,
+                                  )
+                                : Image.network(
+                                    _fotoUrlActual!,
+                                    width: 84,
+                                    height: 84,
+                                    fit: BoxFit.cover,
+                                  ),
+                          ),
+                          const SizedBox(width: 12),
+                          const Expanded(
+                            child: Text(
+                              'Foto lista para analisis IA',
+                              style: TextStyle(
+                                color: Color(0xFF2F9E44),
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    const SizedBox(height: 10),
+                    ElevatedButton.icon(
+                      onPressed: _isProcessingImage ? null : _procesarFotoConIA,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF0B7285),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                      ),
+                      icon: _isProcessingImage
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor:
+                                    AlwaysStoppedAnimation<Color>(Colors.white),
+                              ),
+                            )
+                          : const Icon(Icons.auto_awesome),
+                      label: Text(_isProcessingImage
+                          ? 'Procesando...'
+                          : 'Procesar con IA visual'),
+                    ),
+                    if (_categoria != null) ...[
+                      const SizedBox(height: 10),
+                      Text(
+                        'Categoria detectada: ${_categoriaLegible(_categoria!)}',
+                        style: const TextStyle(
+                          color: Color(0xFF0B7285),
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ),
               const SizedBox(height: 16),
@@ -440,7 +839,8 @@ class _EditarSolicitudScreenState extends State<EditarSolicitudScreen> {
                     ),
                     children: [
                       TileLayer(
-                        urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                        urlTemplate:
+                            'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                         userAgentPackageName: 'com.emergencias.vehicular/1.0.0',
                       ),
                       CircleLayer(
@@ -470,7 +870,8 @@ class _EditarSolicitudScreenState extends State<EditarSolicitudScreen> {
                                     shape: BoxShape.circle,
                                   ),
                                   padding: const EdgeInsets.all(8),
-                                  child: const Icon(Icons.location_on, color: Colors.white, size: 24),
+                                  child: const Icon(Icons.location_on,
+                                      color: Colors.white, size: 24),
                                 ),
                               ],
                             ),
@@ -504,7 +905,8 @@ class _EditarSolicitudScreenState extends State<EditarSolicitudScreen> {
                     ),
                   ),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                     decoration: BoxDecoration(
                       color: Colors.blue,
                       borderRadius: BorderRadius.circular(20),
@@ -530,17 +932,23 @@ class _EditarSolicitudScreenState extends State<EditarSolicitudScreen> {
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.green,
                     padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8)),
                   ),
                   child: _isSaving
                       ? const SizedBox(
                           height: 24,
                           width: 24,
-                          child: CircularProgressIndicator(valueColor: AlwaysStoppedAnimation<Color>(Colors.white)),
+                          child: CircularProgressIndicator(
+                              valueColor:
+                                  AlwaysStoppedAnimation<Color>(Colors.white)),
                         )
                       : const Text(
                           'Guardar Cambios',
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
+                          style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white),
                         ),
                 ),
               ),

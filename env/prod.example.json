@@ -1,0 +1,6 @@
+{
+  "API_BASE_URL": "https://emergencias-backend.onrender.com/api/v1",
+  "VISION_SERVICE_URL": "https://tu-ia.onrender.com",
+  "VISION_SERVICE_TOKEN": "tu_token_secreto_ia",
+  "VISION_TIMEOUT_SECONDS": "90"
+}
