@@ -15,10 +15,10 @@ class EditarSolicitudScreen extends StatefulWidget {
   final VoidCallback onActualizar;
 
   const EditarSolicitudScreen({
-    Key? key,
+    super.key,
     required this.solicitud,
     required this.onActualizar,
-  }) : super(key: key);
+  });
 
   @override
   State<EditarSolicitudScreen> createState() => _EditarSolicitudScreenState();
@@ -102,14 +102,14 @@ class _EditarSolicitudScreenState extends State<EditarSolicitudScreen> {
   Future<void> _initializeSpeechToText() async {
     try {
       bool available = await _speechToText.initialize(
-        onError: (error) => print('Error Speech To Text: $error'),
-        onStatus: (status) => print('Status: $status'),
+        onError: (error) => debugPrint('Error Speech To Text: $error'),
+        onStatus: (status) => debugPrint('Status: $status'),
       );
       if (!available) {
-        print('Speech to text no disponible en este dispositivo');
+        debugPrint('Speech to text no disponible en este dispositivo');
       }
     } catch (e) {
-      print('Error inicializando speech to text: $e');
+      debugPrint('Error inicializando speech to text: $e');
     }
   }
 
@@ -472,7 +472,7 @@ class _EditarSolicitudScreenState extends State<EditarSolicitudScreen> {
           },
         );
       } catch (e) {
-        print('Excepción al iniciar escucha: $e');
+        debugPrint('Excepción al iniciar escucha: $e');
         setState(() => _isListeningAudio = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Error: $e')),
@@ -682,7 +682,7 @@ class _EditarSolicitudScreenState extends State<EditarSolicitudScreen> {
               ),
               const SizedBox(height: 8),
               DropdownButtonFormField<String>(
-                value: _nivelUrgencia,
+                initialValue: _nivelUrgencia,
                 items: ['BAJO', 'MEDIO', 'ALTO', 'CRITICO']
                     .map((nivel) => DropdownMenuItem(
                           value: nivel,
@@ -706,7 +706,7 @@ class _EditarSolicitudScreenState extends State<EditarSolicitudScreen> {
               ),
               const SizedBox(height: 8),
               DropdownButtonFormField<String>(
-                value: _categoria,
+                initialValue: _categoria,
                 items: [
                   'COLISION_VISIBLE',
                   'HUMO_O_SOBRECALENTAMIENTO',
@@ -849,7 +849,7 @@ class _EditarSolicitudScreenState extends State<EditarSolicitudScreen> {
                             point: location,
                             radius: _radioEstadio * 1000, // Radio en metros
                             useRadiusInMeter: true,
-                            color: Colors.blue.withOpacity(0.3),
+                            color: Colors.blue.withValues(alpha: 0.3),
                             borderColor: Colors.blue,
                             borderStrokeWidth: 2,
                           ),
@@ -968,3 +968,7 @@ class _EditarSolicitudScreenState extends State<EditarSolicitudScreen> {
     super.dispose();
   }
 }
+
+
+
+

@@ -1,11 +1,16 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import '../models/solicitud.dart';
 import '../models/postulacion.dart';
 import '../services/solicitud_service.dart';
 import '../services/postulacion_service.dart';
+import '../services/tracking_service.dart';
 import 'editar_solicitud_screen.dart';
+import 'pagos_solicitud_screen.dart';
 import '../widgets/theme_toggle_button.dart';
 
 class DetalleSolicitudScreen extends StatefulWidget {
@@ -13,10 +18,10 @@ class DetalleSolicitudScreen extends StatefulWidget {
   final VoidCallback onActualizar;
 
   const DetalleSolicitudScreen({
-    Key? key,
+    super.key,
     required this.solicitud,
     required this.onActualizar,
-  }) : super(key: key);
+  });
 
   @override
   State<DetalleSolicitudScreen> createState() => _DetalleSolicitudScreenState();
@@ -25,16 +30,72 @@ class DetalleSolicitudScreen extends StatefulWidget {
 class _DetalleSolicitudScreenState extends State<DetalleSolicitudScreen> {
   final SolicitudService _solicitudService = SolicitudService();
   final PostulacionService _postulacionService = PostulacionService();
+  final TrackingService _trackingService = TrackingService();
   bool _isLoading = false;
   late Solicitud _solicitudActual;
   List<Postulacion> _postulaciones = [];
+  final Map<String, Map<String, dynamic>> _cotizaciones = {};
   bool _cargandoPostulaciones = false;
+  Map<String, dynamic>? _tracking;
+  Timer? _trackingTimer;
+  Timer? _wsPingTimer;
+  Timer? _wsReconnectTimer;
+  WebSocket? _trackingWs;
 
   @override
   void initState() {
     super.initState();
     _solicitudActual = widget.solicitud;
     _cargarPostulaciones();
+    _loadTracking();
+    _trackingTimer = Timer.periodic(const Duration(seconds: 20), (_) => _loadTracking());
+    _connectTrackingWs();
+  }
+
+  @override
+  void dispose() {
+    _trackingTimer?.cancel();
+    _wsPingTimer?.cancel();
+    _wsReconnectTimer?.cancel();
+    _trackingWs?.close();
+    super.dispose();
+  }
+
+  Future<void> _connectTrackingWs() async {
+    final idSolicitud = _solicitudActual.idSolicitud;
+    final wsUrl = TrackingService.baseUrl.contains('localhost')
+        ? 'ws://localhost:8000/api/v1/trabajadores/ws/solicitudes/$idSolicitud'
+        : 'wss://emergencias-backend.onrender.com/api/v1/trabajadores/ws/solicitudes/$idSolicitud';
+    try {
+      _trackingWs = await WebSocket.connect(wsUrl);
+      _wsPingTimer?.cancel();
+      _wsPingTimer = Timer.periodic(const Duration(seconds: 10), (_) {
+        try {
+          _trackingWs?.add('ping');
+        } catch (_) {}
+      });
+      _trackingWs!.listen((event) {
+        try {
+          final data = jsonDecode(event as String) as Map<String, dynamic>;
+          if (!mounted) return;
+          setState(() => _tracking = _normalizeTrackingPayload(data));
+        } catch (_) {}
+      }, onDone: () {
+        _wsReconnectTimer?.cancel();
+        _wsReconnectTimer = Timer(const Duration(seconds: 3), _connectTrackingWs);
+      }, onError: (_) {
+        _wsReconnectTimer?.cancel();
+        _wsReconnectTimer = Timer(const Duration(seconds: 3), _connectTrackingWs);
+      });
+    } catch (_) {}
+  }
+
+  Future<void> _loadTracking() async {
+    try {
+      final t = await _trackingService.trackingPorSolicitud(_solicitudActual.idSolicitud);
+      if (!mounted) return;
+      setState(() => _tracking = _normalizeTrackingPayload(t));
+    } catch (_) {}
   }
 
   Future<void> _cancelarSolicitud() async {
@@ -123,6 +184,9 @@ class _DetalleSolicitudScreenState extends State<DetalleSolicitudScreen> {
           _postulaciones = postulaciones;
           _cargandoPostulaciones = false;
         });
+        for (final p in postulaciones) {
+          _cargarCotizacion(p.idPostulacion);
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -132,6 +196,16 @@ class _DetalleSolicitudScreenState extends State<DetalleSolicitudScreen> {
         );
       }
     }
+  }
+
+  Future<void> _cargarCotizacion(String idPostulacion) async {
+    try {
+      final cotizacion = await _postulacionService.obtenerCotizacion(idPostulacion);
+      if (!mounted) return;
+      setState(() {
+        _cotizaciones[idPostulacion] = cotizacion;
+      });
+    } catch (_) {}
   }
 
   Color _getColorEstado(String estado) {
@@ -168,6 +242,17 @@ class _DetalleSolicitudScreenState extends State<DetalleSolicitudScreen> {
   }
 
   Future<void> _aceptarPostulacion(Postulacion postulacion) async {
+    final cot = _cotizaciones[postulacion.idPostulacion];
+    if (cot == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Este taller aún no envió su cotización')),
+      );
+      return;
+    }
+    final confirm = await _mostrarDialogoCotizacion(postulacion, cot);
+    if (confirm != true) return;
+    if (!mounted) return;
+
     showDialog(
       context: context,
       builder: (BuildContext context) => AlertDialog(
@@ -197,6 +282,7 @@ class _DetalleSolicitudScreenState extends State<DetalleSolicitudScreen> {
   Future<void> _confirmarAceptacion(Postulacion postulacion) async {
     try {
       setState(() => _isLoading = true);
+      await _postulacionService.decidirCotizacion(postulacion.idPostulacion, true);
 
       await _postulacionService.aceptarPostulacion(postulacion.idPostulacion);
 
@@ -242,6 +328,62 @@ class _DetalleSolicitudScreenState extends State<DetalleSolicitudScreen> {
     }
   }
 
+  Future<bool?> _mostrarDialogoCotizacion(Postulacion postulacion, Map<String, dynamic> cotizacion) {
+    final servicios = (cotizacion['servicios'] as List<dynamic>? ?? const []);
+    final total = (cotizacion['precio_total_estimado'] as num?)?.toDouble() ?? 0;
+    final eta = cotizacion['tiempo_estimado_llegada_min'] ?? postulacion.tiempoEstimadoMin;
+    return showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Cotización de ${postulacion.nombreTaller}'),
+        content: SizedBox(
+          width: 360,
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('Tiempo estimado de llegada: $eta min'),
+                const SizedBox(height: 8),
+                const Text('Detalle de servicios:', style: TextStyle(fontWeight: FontWeight.bold)),
+                const SizedBox(height: 6),
+                ...servicios.map((s) => Padding(
+                      padding: const EdgeInsets.only(bottom: 4),
+                      child: Text(
+                        '- ${s['nombre_servicio'] ?? 'Servicio'}: Bs ${(s['precio_servicio'] as num?)?.toStringAsFixed(2) ?? '0.00'}',
+                      ),
+                    )),
+                const SizedBox(height: 8),
+                Text('Cargo por cancelación (10%): Bs ${(total * 0.1).toStringAsFixed(2)}'),
+                Text('Total estimado: Bs ${total.toStringAsFixed(2)}',
+                    style: const TextStyle(fontWeight: FontWeight.bold)),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(context, false);
+              try {
+                await _postulacionService.decidirCotizacion(postulacion.idPostulacion, false);
+                if (!mounted) return;
+                ScaffoldMessenger.of(this.context).showSnackBar(
+                  const SnackBar(content: Text('Cotización rechazada')),
+                );
+              } catch (_) {}
+            },
+            child: const Text('Rechazar'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Aceptar y continuar'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -270,10 +412,10 @@ class _DetalleSolicitudScreenState extends State<DetalleSolicitudScreen> {
                       color: isDark ? const Color(0xFF181B24) : Colors.white,
                       borderRadius: BorderRadius.circular(20),
                       border: Border.all(
-                          color: estadoColor.withOpacity(0.45), width: 1.4),
+                          color: estadoColor.withValues(alpha: 0.45), width: 1.4),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(isDark ? 0.25 : 0.07),
+                          color: Colors.black.withValues(alpha: isDark ? 0.25 : 0.07),
                           blurRadius: 14,
                           offset: const Offset(0, 5),
                         ),
@@ -293,7 +435,7 @@ class _DetalleSolicitudScreenState extends State<DetalleSolicitudScreen> {
                                     'Código de Solicitud',
                                     style: TextStyle(
                                       fontSize: 12,
-                                      color: cs.onSurface.withOpacity(0.62),
+                                      color: cs.onSurface.withValues(alpha: 0.62),
                                     ),
                                   ),
                                   const SizedBox(height: 6),
@@ -329,7 +471,7 @@ class _DetalleSolicitudScreenState extends State<DetalleSolicitudScreen> {
                           ],
                         ),
                         const SizedBox(height: 14),
-                        Divider(color: cs.outlineVariant.withOpacity(0.45)),
+                        Divider(color: cs.outlineVariant.withValues(alpha: 0.45)),
                         const SizedBox(height: 14),
                         _buildInfoRow('Vehículo', _solicitudActual.vehiculo,
                             Icons.directions_car),
@@ -422,6 +564,29 @@ class _DetalleSolicitudScreenState extends State<DetalleSolicitudScreen> {
                         ),
                       ),
                   ],
+                  const SizedBox(height: 10),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => PagosSolicitudScreen(
+                              idSolicitud: _solicitudActual.idSolicitud,
+                            ),
+                          ),
+                        );
+                      },
+                      icon: const Icon(Icons.payments),
+                      label: const Text('Gestionar Pagos'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF0EA5E9),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 13),
+                      ),
+                    ),
+                  ),
                   if (_solicitudActual.estado != 'CANCELADA' &&
                       _solicitudActual.estado != 'ATENDIDA') ...[
                     const SizedBox(height: 20),
@@ -446,7 +611,7 @@ class _DetalleSolicitudScreenState extends State<DetalleSolicitudScreen> {
                               : const Color(0xFFEAF2FF),
                           borderRadius: BorderRadius.circular(14),
                           border: Border.all(
-                              color: const Color(0xFF60A5FA).withOpacity(0.4)),
+                              color: const Color(0xFF60A5FA).withValues(alpha: 0.4)),
                         ),
                         child: Column(
                           children: [
@@ -457,7 +622,7 @@ class _DetalleSolicitudScreenState extends State<DetalleSolicitudScreen> {
                               'Los talleres que respondan a tu solicitud aparecerán aquí',
                               textAlign: TextAlign.center,
                               style: TextStyle(
-                                  color: cs.onSurface.withOpacity(0.78)),
+                                  color: cs.onSurface.withValues(alpha: 0.78)),
                             ),
                           ],
                         ),
@@ -478,7 +643,7 @@ class _DetalleSolicitudScreenState extends State<DetalleSolicitudScreen> {
                                   : Colors.white,
                               borderRadius: BorderRadius.circular(16),
                               border: Border.all(
-                                color: cs.outlineVariant.withOpacity(0.35),
+                                color: cs.outlineVariant.withValues(alpha: 0.35),
                               ),
                             ),
                             child: Column(
@@ -524,7 +689,7 @@ class _DetalleSolicitudScreenState extends State<DetalleSolicitudScreen> {
                                     postulacion.mensajePropuesta!,
                                     style: TextStyle(
                                       fontSize: 14,
-                                      color: cs.onSurface.withOpacity(0.72),
+                                      color: cs.onSurface.withValues(alpha: 0.72),
                                     ),
                                   ),
                                 ],
@@ -533,7 +698,7 @@ class _DetalleSolicitudScreenState extends State<DetalleSolicitudScreen> {
                                   'Postulado: ${postulacion.fechaPostulacion.toString().split('.')[0]}',
                                   style: TextStyle(
                                     fontSize: 12,
-                                    color: cs.onSurface.withOpacity(0.58),
+                                    color: cs.onSurface.withValues(alpha: 0.58),
                                   ),
                                 ),
                                 if (_puedeSeleccionarTaller()) ...[
@@ -562,6 +727,29 @@ class _DetalleSolicitudScreenState extends State<DetalleSolicitudScreen> {
                         },
                       ),
                   ],
+                  if (_tracking != null) ...[
+                    const SizedBox(height: 20),
+                    Text(
+                      'Tracking en tiempo real',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 18,
+                        color: cs.onSurface,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Estado: ${_tracking!['estado_orden']} | ETA: ${(((_tracking!['duracion_segundos'] ?? 0) as num) / 60).toStringAsFixed(0)} min',
+                      style: TextStyle(color: cs.onSurface.withValues(alpha: 0.72)),
+                    ),
+                    if (_tracking!['duracion_total_segundos'] != null)
+                      Text(
+                        'Tiempo total: ${(((_tracking!['duracion_total_segundos'] ?? 0) as num) / 60).toStringAsFixed(0)} min',
+                        style: TextStyle(color: cs.onSurface.withValues(alpha: 0.68)),
+                      ),
+                    if (_tracking!['latitud_actual'] != null && _tracking!['longitud_actual'] != null)
+                      _buildTrackingMapWidget(_tracking!),
+                  ],
                   const SizedBox(height: 24),
                 ],
               ),
@@ -585,7 +773,7 @@ class _DetalleSolicitudScreenState extends State<DetalleSolicitudScreen> {
                 Text(
                   label,
                   style: TextStyle(
-                      fontSize: 12, color: cs.onSurface.withOpacity(0.62)),
+                      fontSize: 12, color: cs.onSurface.withValues(alpha: 0.62)),
                 ),
                 const SizedBox(height: 4),
                 Text(
@@ -622,7 +810,7 @@ class _DetalleSolicitudScreenState extends State<DetalleSolicitudScreen> {
             Text(
               label,
               style:
-                  TextStyle(fontSize: 13, color: cs.onSurface.withOpacity(0.7)),
+                  TextStyle(fontSize: 13, color: cs.onSurface.withValues(alpha: 0.7)),
             ),
           ],
         ),
@@ -631,7 +819,7 @@ class _DetalleSolicitudScreenState extends State<DetalleSolicitudScreen> {
           Text(
             'Sin seleccionar',
             style: TextStyle(
-                color: cs.onSurface.withOpacity(0.52),
+                color: cs.onSurface.withValues(alpha: 0.52),
                 fontStyle: FontStyle.italic),
           )
         else
@@ -675,7 +863,7 @@ class _DetalleSolicitudScreenState extends State<DetalleSolicitudScreen> {
             Text(
               label,
               style:
-                  TextStyle(fontSize: 13, color: cs.onSurface.withOpacity(0.7)),
+                  TextStyle(fontSize: 13, color: cs.onSurface.withValues(alpha: 0.7)),
             ),
           ],
         ),
@@ -686,14 +874,14 @@ class _DetalleSolicitudScreenState extends State<DetalleSolicitudScreen> {
           decoration: BoxDecoration(
             color: isDark ? const Color(0xFF0F1320) : const Color(0xFFF8F9FC),
             borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: cs.outlineVariant.withOpacity(0.35)),
+            border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.35)),
           ),
           child: Text(
             value ?? 'Sin descripción',
             style: TextStyle(
               fontSize: 13,
               color:
-                  value != null ? cs.onSurface : cs.onSurface.withOpacity(0.52),
+                  value != null ? cs.onSurface : cs.onSurface.withValues(alpha: 0.52),
             ),
           ),
         ),
@@ -714,7 +902,7 @@ class _DetalleSolicitudScreenState extends State<DetalleSolicitudScreen> {
             Text(
               'Ubicación',
               style:
-                  TextStyle(fontSize: 13, color: cs.onSurface.withOpacity(0.7)),
+                  TextStyle(fontSize: 13, color: cs.onSurface.withValues(alpha: 0.7)),
             ),
           ],
         ),
@@ -739,7 +927,7 @@ class _DetalleSolicitudScreenState extends State<DetalleSolicitudScreen> {
                       point: location,
                       radius: _solicitudActual.radioEstadio * 1000,
                       useRadiusInMeter: true,
-                      color: Colors.blue.withOpacity(0.24),
+                      color: Colors.blue.withValues(alpha: 0.24),
                       borderColor: Colors.blue,
                       borderStrokeWidth: 2,
                     ),
@@ -770,9 +958,99 @@ class _DetalleSolicitudScreenState extends State<DetalleSolicitudScreen> {
         const SizedBox(height: 8),
         Text(
           'Lat: ${latitude.toStringAsFixed(4)} | Lng: ${longitude.toStringAsFixed(4)}',
-          style: TextStyle(fontSize: 11, color: cs.onSurface.withOpacity(0.56)),
+          style: TextStyle(fontSize: 11, color: cs.onSurface.withValues(alpha: 0.56)),
         ),
       ],
     );
   }
+
+  Widget _buildTrackingMapWidget(Map<String, dynamic> tracking) {
+    final lat = (tracking['latitud_actual'] as num).toDouble();
+    final lng = (tracking['longitud_actual'] as num).toDouble();
+    final latDestino = (tracking['latitud_destino'] as num?)?.toDouble();
+    final lngDestino = (tracking['longitud_destino'] as num?)?.toDouble();
+    final latSolicitud = (tracking['latitud_solicitud'] as num?)?.toDouble();
+    final lngSolicitud = (tracking['longitud_solicitud'] as num?)?.toDouble();
+    final latTaller = (tracking['latitud_taller'] as num?)?.toDouble();
+    final lngTaller = (tracking['longitud_taller'] as num?)?.toDouble();
+    final ruta = _geoLineToLatLng(tracking['ruta_geojson']);
+    final rutaRecorrida = _geoLineToLatLng(tracking['ruta_recorrida_geojson']);
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(10),
+      child: SizedBox(
+        height: 250,
+        child: FlutterMap(
+          options: MapOptions(initialCenter: LatLng(lat, lng), initialZoom: 15.0),
+          children: [
+            TileLayer(
+              urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+              userAgentPackageName: 'com.emergencias.vehicular/1.0.0',
+            ),
+            if (rutaRecorrida.isNotEmpty)
+              PolylineLayer(polylines: [Polyline(points: rutaRecorrida, strokeWidth: 4, color: Colors.grey)]),
+            if (ruta.isNotEmpty)
+              PolylineLayer(polylines: [Polyline(points: ruta, strokeWidth: 5, color: Colors.green)]),
+            MarkerLayer(
+              markers: [
+                Marker(
+                  point: LatLng(lat, lng),
+                  width: 44,
+                  height: 44,
+                  child: const Icon(Icons.delivery_dining, color: Colors.red, size: 34),
+                ),
+                if (latSolicitud != null && lngSolicitud != null)
+                  Marker(
+                    point: LatLng(latSolicitud, lngSolicitud),
+                    width: 44,
+                    height: 44,
+                    child: const Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 34),
+                  ),
+                if (latTaller != null && lngTaller != null)
+                  Marker(
+                    point: LatLng(latTaller, lngTaller),
+                    width: 44,
+                    height: 44,
+                    child: const Icon(Icons.home_work, color: Colors.blue, size: 34),
+                  ),
+                if (latDestino != null && lngDestino != null)
+                  Marker(
+                    point: LatLng(latDestino, lngDestino),
+                    width: 44,
+                    height: 44,
+                    child: const Icon(Icons.place, color: Colors.green, size: 34),
+                  ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  List<LatLng> _geoLineToLatLng(dynamic geo) {
+    if (geo is! Map<String, dynamic>) return const [];
+    if (geo['type'] != 'LineString') return const [];
+    final coords = geo['coordinates'];
+    if (coords is! List) return const [];
+    return coords
+        .whereType<List>()
+        .where((c) => c.length >= 2)
+        .map((c) => LatLng((c[1] as num).toDouble(), (c[0] as num).toDouble()))
+        .toList();
+  }
+
+  Map<String, dynamic> _normalizeTrackingPayload(Map<String, dynamic> raw) {
+    final out = Map<String, dynamic>.from(raw);
+    for (final key in ['ruta_geojson', 'ruta_recorrida_geojson']) {
+      final value = out[key];
+      if (value is String && value.isNotEmpty) {
+        try {
+          out[key] = jsonDecode(value);
+        } catch (_) {}
+      }
+    }
+    return out;
+  }
 }
+
+

@@ -4,8 +4,10 @@ import 'editar_perfil_screen.dart';
 import 'mis_solicitudes_screen.dart';
 import 'notificaciones_screen.dart';
 import '../services/auth_service.dart';
+import '../services/tenant_service.dart';
 import 'login_screen.dart';
 import '../widgets/theme_toggle_button.dart';
+import 'trabajador_tracking_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -16,7 +18,10 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   final AuthService _authService = AuthService();
+  final TenantService _tenantService = TenantService();
   String? userName = '';
+  String userRole = 'CLIENTE';
+  String tenantLabel = '';
 
   @override
   void initState() {
@@ -26,15 +31,28 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Future<void> _loadUserName() async {
     final name = await _authService.getUserName();
+    final user = await _authService.getCurrentUser();
+    if (!mounted) return;
     setState(() {
       userName = name;
+      userRole = user?.rol ?? 'CLIENTE';
     });
+    if (userRole == 'TRABAJADOR') {
+      try {
+        final tenant = await _tenantService.obtenerTenantTrabajador();
+        if (!mounted) return;
+        setState(() {
+          tenantLabel = (tenant['slug_tenant'] ?? tenant['nombre_tenant'] ?? '').toString();
+        });
+      } catch (_) {}
+    }
   }
 
   Future<void> _logout() async {
+    final rootContext = context;
     showDialog(
-      context: context,
-      builder: (BuildContext context) {
+      context: rootContext,
+      builder: (BuildContext dialogContext) {
         return AlertDialog(
           title: const Text('Cerrar sesión'),
           content: const Text('¿Deseas cerrar tu sesión?'),
@@ -45,15 +63,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
             TextButton(
               onPressed: () async {
-                Navigator.of(context).pop();
+                Navigator.of(dialogContext).pop();
                 await _authService.logout();
-                if (mounted) {
-                  Navigator.of(context).pushAndRemoveUntil(
-                    MaterialPageRoute(
-                        builder: (context) => const LoginScreen()),
-                    (route) => false,
-                  );
-                }
+                if (!rootContext.mounted) return;
+                Navigator.of(rootContext).pushAndRemoveUntil(
+                  MaterialPageRoute(
+                      builder: (_) => const LoginScreen()),
+                  (route) => false,
+                );
               },
               child: const Text('Sí, cerrar sesión',
                   style: TextStyle(color: Colors.red)),
@@ -72,74 +89,75 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return Scaffold(
       body: CustomScrollView(
         slivers: [
-          SliverToBoxAdapter(
-            child: Container(
-              padding: const EdgeInsets.fromLTRB(20, 20, 20, 18),
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
+          SliverAppBar(
+            pinned: true,
+            toolbarHeight: 76,
+            expandedHeight: 122,
+            backgroundColor: const Color(0xFFFF5A5F),
+            surfaceTintColor: Colors.transparent,
+            foregroundColor: Colors.white,
+            elevation: 0,
+            flexibleSpace: Container(
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                   colors: [Color(0xFFFF5A5F), Color(0xFFFF4B4F)],
                 ),
-                borderRadius: const BorderRadius.only(
-                  bottomLeft: Radius.circular(24),
-                  bottomRight: Radius.circular(24),
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: const Color(0xFFFF5A5F).withOpacity(0.35),
-                    blurRadius: 16,
-                    offset: const Offset(0, 6),
-                  ),
-                ],
               ),
               child: SafeArea(
                 bottom: false,
-                child: Row(
-                  children: [
-                    Container(
-                      width: 48,
-                      height: 48,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.16),
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      child: const Icon(Icons.shield,
-                          color: Colors.white, size: 30),
-                    ),
-                    const SizedBox(width: 12),
-                    const Expanded(
-                      child: Text(
-                        'Asistencia Vehicular',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 34,
-                          fontWeight: FontWeight.w800,
+                child: Align(
+                  alignment: Alignment.bottomCenter,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 0, 16, 14),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 48,
+                          height: 48,
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.16),
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          child: const Icon(Icons.shield,
+                              color: Colors.white, size: 30),
                         ),
-                      ),
-                    ),
-                    Container(
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.16),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const ThemeToggleButton(),
-                    ),
-                    const SizedBox(width: 10),
-                    ElevatedButton.icon(
-                      onPressed: _logout,
-                      icon: const Icon(Icons.logout),
-                      label: const Text('Salir'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.white,
-                        foregroundColor: const Color(0xFFFF5A5F),
-                        elevation: 0,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
+                        const SizedBox(width: 12),
+                        const Expanded(
+                          child: Text(
+                            'Asistencia Vehicular',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 28,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
                         ),
-                      ),
+                        Container(
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.16),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const ThemeToggleButton(),
+                        ),
+                        const SizedBox(width: 10),
+                        ElevatedButton.icon(
+                          onPressed: _logout,
+                          icon: const Icon(Icons.logout),
+                          label: const Text('Salir'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.white,
+                            foregroundColor: const Color(0xFFFF5A5F),
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                  ],
+                  ),
                 ),
               ),
             ),
@@ -162,23 +180,49 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     'Elige una opción para continuar',
                     style: TextStyle(
                       fontSize: 16,
-                      color: textColor.withOpacity(0.65),
+                      color: textColor.withValues(alpha: 0.65),
                     ),
                   ),
+                  if (userRole == 'TRABAJADOR' && tenantLabel.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      'Tenant: $tenantLabel',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: textColor.withValues(alpha: 0.75),
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 18),
-                  _buildEmergencyCard(
-                    isDark: isDark,
-                    onTap: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (context) => const VehiculosScreen(
-                              seleccionarPara: 'emergencia'),
-                        ),
-                      );
-                    },
-                  ),
+                  if (userRole == 'CLIENTE')
+                    _buildEmergencyCard(
+                      isDark: isDark,
+                      onTap: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (context) => const VehiculosScreen(
+                                seleccionarPara: 'emergencia'),
+                          ),
+                        );
+                      },
+                    ),
+                  if (userRole == 'TRABAJADOR')
+                    _buildFeatureCard(
+                      color: const Color(0xFF2563EB),
+                      title: 'Mis Asignaciones',
+                      subtitle: 'Gestiona ordenes, progreso y tracking',
+                      icon: Icons.route,
+                      onTap: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (context) => const TrabajadorTrackingScreen(),
+                          ),
+                        );
+                      },
+                    ),
                   const SizedBox(height: 16),
-                  GridView.count(
+                  if (userRole == 'CLIENTE') GridView.count(
                     physics: const NeverScrollableScrollPhysics(),
                     crossAxisCount: 2,
                     shrinkWrap: true,
@@ -267,7 +311,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           border: Border.all(color: const Color(0xFFFF9F9F), width: 1.5),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(isDark ? 0.3 : 0.08),
+              color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.08),
               blurRadius: 14,
               offset: const Offset(0, 6),
             ),
@@ -279,7 +323,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               width: 72,
               height: 72,
               decoration: BoxDecoration(
-                color: const Color(0xFFFF5A5F).withOpacity(0.2),
+                color: const Color(0xFFFF5A5F).withValues(alpha: 0.2),
                 shape: BoxShape.circle,
               ),
               child: const Icon(Icons.emergency,
@@ -337,10 +381,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
         decoration: BoxDecoration(
           color: isDark ? const Color(0xFF151C2E) : Colors.white,
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: color.withOpacity(0.6), width: 1.5),
+          border: Border.all(color: color.withValues(alpha: 0.6), width: 1.5),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(isDark ? 0.26 : 0.08),
+              color: Colors.black.withValues(alpha: isDark ? 0.26 : 0.08),
               blurRadius: 14,
               offset: const Offset(0, 6),
             ),
@@ -354,7 +398,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               height: 62,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: color.withOpacity(0.16),
+                color: color.withValues(alpha: 0.16),
               ),
               child: Icon(icon, color: color, size: 32),
             ),
@@ -378,7 +422,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 style: TextStyle(
                   fontSize: 14,
                   color:
-                      Theme.of(context).colorScheme.onSurface.withOpacity(0.65),
+                      Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.65),
                 ),
               ),
             ),
@@ -401,3 +445,4 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 }
+

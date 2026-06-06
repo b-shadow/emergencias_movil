@@ -6,8 +6,7 @@ import '../widgets/theme_toggle_button.dart';
 class EditVehiculoScreen extends StatefulWidget {
   final Vehiculo vehiculo;
 
-  const EditVehiculoScreen({Key? key, required this.vehiculo})
-      : super(key: key);
+  const EditVehiculoScreen({super.key, required this.vehiculo});
 
   @override
   State<EditVehiculoScreen> createState() => _EditVehiculoScreenState();
@@ -23,7 +22,9 @@ class _EditVehiculoScreenState extends State<EditVehiculoScreen> {
   late TextEditingController _anioController;
   late TextEditingController _colorController;
   late TextEditingController _combustibleController;
+  late TextEditingController _aseguradoraController;
   late TextEditingController _observacionesController;
+  late String _tipoSeguro;
   
   bool _isLoading = false;
 
@@ -36,7 +37,9 @@ class _EditVehiculoScreenState extends State<EditVehiculoScreen> {
     _anioController = TextEditingController(text: widget.vehiculo.anio.toString());
     _colorController = TextEditingController(text: widget.vehiculo.color ?? '');
     _combustibleController = TextEditingController(text: widget.vehiculo.tipoCombustible ?? '');
+    _aseguradoraController = TextEditingController(text: widget.vehiculo.aseguradora ?? '');
     _observacionesController = TextEditingController(text: widget.vehiculo.observaciones ?? '');
+    _tipoSeguro = widget.vehiculo.tipoSeguro ?? 'SIN_SEGURO';
   }
 
   @override
@@ -47,6 +50,7 @@ class _EditVehiculoScreenState extends State<EditVehiculoScreen> {
     _anioController.dispose();
     _colorController.dispose();
     _combustibleController.dispose();
+    _aseguradoraController.dispose();
     _observacionesController.dispose();
     super.dispose();
   }
@@ -69,6 +73,8 @@ class _EditVehiculoScreenState extends State<EditVehiculoScreen> {
         anio: int.parse(_anioController.text),
         color: _colorController.text.isEmpty ? null : _colorController.text,
         tipoCombustible: _combustibleController.text.isEmpty ? null : _combustibleController.text,
+        tipoSeguro: _tipoSeguro,
+        aseguradora: _aseguradoraController.text.isEmpty ? null : _aseguradoraController.text,
         observaciones: _observacionesController.text.isEmpty ? null : _observacionesController.text,
       );
 
@@ -203,6 +209,41 @@ class _EditVehiculoScreenState extends State<EditVehiculoScreen> {
                 ),
               ),
               const SizedBox(height: 16),
+              DropdownButtonFormField<String>(
+                initialValue: _tipoSeguro,
+                decoration: InputDecoration(
+                  labelText: 'Tipo de Seguro',
+                  prefixIcon: const Icon(Icons.security),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                items: const [
+                  DropdownMenuItem(value: 'SIN_SEGURO', child: Text('Sin seguro')),
+                  DropdownMenuItem(value: 'BASICO', child: Text('Seguro básico')),
+                  DropdownMenuItem(value: 'COMPLETO', child: Text('Seguro completo')),
+                ],
+                onChanged: (value) {
+                  if (value != null) {
+                    setState(() {
+                      _tipoSeguro = value;
+                    });
+                  }
+                },
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _aseguradoraController,
+                decoration: InputDecoration(
+                  labelText: 'Aseguradora',
+                  hintText: 'Ej: Bisa Seguros',
+                  prefixIcon: const Icon(Icons.business),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
               TextFormField(
                 controller: _observacionesController,
                 decoration: InputDecoration(
@@ -255,3 +296,4 @@ class _EditVehiculoScreenState extends State<EditVehiculoScreen> {
     );
   }
 }
+

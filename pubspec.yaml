@@ -46,6 +46,7 @@ dependencies:
   device_info_plus: ^9.1.0
   flutter_local_notifications: ^17.0.0
   uuid: ^4.0.0
+  flutter_stripe: ^11.5.0
 
 dev_dependencies:
   flutter_test:

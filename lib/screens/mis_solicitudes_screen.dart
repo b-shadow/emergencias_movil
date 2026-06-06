@@ -5,7 +5,7 @@ import 'detalle_solicitud_screen.dart';
 import '../widgets/theme_toggle_button.dart';
 
 class MisSolicitudesScreen extends StatefulWidget {
-  const MisSolicitudesScreen({Key? key}) : super(key: key);
+  const MisSolicitudesScreen({super.key});
 
   @override
   State<MisSolicitudesScreen> createState() => _MisSolicitudesScreenState();
@@ -29,12 +29,14 @@ class _MisSolicitudesScreenState extends State<MisSolicitudesScreen> {
         _isLoading = true;
       });
       final solicitudes = await _solicitudService.obtenerSolicitudes();
+      if (!mounted) return;
       setState(() {
         _solicitudes = solicitudes;
         _ordenarSolicitudes();
         _isLoading = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _isLoading = false;
       });
@@ -121,14 +123,14 @@ class _MisSolicitudesScreenState extends State<MisSolicitudesScreen> {
             decoration: BoxDecoration(
               color: isDark ? const Color(0xFF181B24) : Colors.white,
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: cs.outlineVariant.withOpacity(0.4)),
+              border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.4)),
             ),
             child: Row(
               children: [
                 Text(
                   'Ordenar por:',
                   style: TextStyle(
-                    color: cs.onSurface.withOpacity(0.8),
+                    color: cs.onSurface.withValues(alpha: 0.8),
                     fontWeight: FontWeight.w700,
                   ),
                 ),
@@ -165,12 +167,12 @@ class _MisSolicitudesScreenState extends State<MisSolicitudesScreen> {
                           children: [
                             Icon(Icons.inbox_rounded,
                                 size: 62,
-                                color: cs.onSurface.withOpacity(0.25)),
+                                color: cs.onSurface.withValues(alpha: 0.25)),
                             const SizedBox(height: 14),
                             Text(
                               'No hay solicitudes registradas',
                               style: TextStyle(
-                                  color: cs.onSurface.withOpacity(0.65),
+                                  color: cs.onSurface.withValues(alpha: 0.65),
                                   fontSize: 16),
                             ),
                           ],
@@ -207,12 +209,12 @@ class _MisSolicitudesScreenState extends State<MisSolicitudesScreen> {
                                       : Colors.white,
                                   borderRadius: BorderRadius.circular(18),
                                   border: Border.all(
-                                      color: estadoColor.withOpacity(0.35),
+                                      color: estadoColor.withValues(alpha: 0.35),
                                       width: 1.3),
                                   boxShadow: [
                                     BoxShadow(
                                       color: Colors.black
-                                          .withOpacity(isDark ? 0.24 : 0.07),
+                                          .withValues(alpha: isDark ? 0.24 : 0.07),
                                       blurRadius: 12,
                                       offset: const Offset(0, 5),
                                     ),
@@ -262,7 +264,7 @@ class _MisSolicitudesScreenState extends State<MisSolicitudesScreen> {
                                       children: [
                                         Icon(
                                           Icons.directions_car_outlined,
-                                          color: cs.onSurface.withOpacity(0.7),
+                                          color: cs.onSurface.withValues(alpha: 0.7),
                                         ),
                                         const SizedBox(width: 8),
                                         Expanded(
@@ -271,7 +273,7 @@ class _MisSolicitudesScreenState extends State<MisSolicitudesScreen> {
                                             overflow: TextOverflow.ellipsis,
                                             style: TextStyle(
                                               color: cs.onSurface
-                                                  .withOpacity(0.78),
+                                                  .withValues(alpha: 0.78),
                                               fontSize: 16,
                                             ),
                                           ),
@@ -298,7 +300,7 @@ class _MisSolicitudesScreenState extends State<MisSolicitudesScreen> {
                                               solicitud.nivelUrgencia,
                                               style: TextStyle(
                                                 color: cs.onSurface
-                                                    .withOpacity(0.75),
+                                                    .withValues(alpha: 0.75),
                                                 fontWeight: FontWeight.w600,
                                               ),
                                             ),
@@ -309,7 +311,7 @@ class _MisSolicitudesScreenState extends State<MisSolicitudesScreen> {
                                               solicitud.fechaCreacion),
                                           style: TextStyle(
                                             color:
-                                                cs.onSurface.withOpacity(0.52),
+                                                cs.onSurface.withValues(alpha: 0.52),
                                             fontSize: 12,
                                           ),
                                         ),
@@ -328,3 +330,5 @@ class _MisSolicitudesScreenState extends State<MisSolicitudesScreen> {
     );
   }
 }
+
+

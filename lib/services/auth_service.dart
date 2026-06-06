@@ -1,10 +1,12 @@
+import 'package:flutter/foundation.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/user.dart';
+import 'api_base_url.dart';
 
 class AuthService {
-  static const String baseUrl = String.fromEnvironment('API_BASE_URL', defaultValue: 'https://emergencias-backend.onrender.com/api/v1');
+  static String get baseUrl => resolveApiBaseUrl();
 
   Future<TokenResponse> login(String correo, String contrasena) async {
     try {
@@ -28,8 +30,8 @@ class AuthService {
         final tokenResponse = TokenResponse.fromJson(data);
 
         // Verificar que el rol sea CLIENTE
-        if (tokenResponse.rol != 'CLIENTE') {
-          throw Exception('Solo clientes pueden ingresar desde la aplicación móvil');
+        if (tokenResponse.rol != 'CLIENTE' && tokenResponse.rol != 'TRABAJADOR') {
+          throw Exception('Este rol no puede ingresar desde la aplicacion movil');
         }
 
         // Guardar en SharedPreferences
@@ -115,7 +117,7 @@ class AuthService {
 
       return response.statusCode == 200;
     } catch (e) {
-      print('[AUTH] Error validando token: $e');
+      debugPrint('[AUTH] Error validando token: $e');
       return false;
     }
   }
@@ -269,4 +271,6 @@ class AuthService {
     }
   }
 }
+
+
 

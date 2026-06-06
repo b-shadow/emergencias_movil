@@ -64,7 +64,7 @@ class _RegisterClienteScreenState extends State<RegisterClienteScreen> {
                 'Completa tus datos para registrarte como cliente',
                 style: TextStyle(
                   fontSize: 14,
-                  color: colorScheme.onSurface.withOpacity(0.65),
+                  color: colorScheme.onSurface.withValues(alpha: 0.65),
                 ),
                 textAlign: TextAlign.center,
               ),
@@ -214,7 +214,7 @@ class _RegisterClienteScreenState extends State<RegisterClienteScreen> {
                 children: [
                   Text(
                     '¿Ya tienes cuenta?',
-                    style: TextStyle(color: colorScheme.onSurface.withOpacity(0.75)),
+                    style: TextStyle(color: colorScheme.onSurface.withValues(alpha: 0.75)),
                   ),
                   TextButton(
                     onPressed: () => Navigator.pop(context),
@@ -229,7 +229,7 @@ class _RegisterClienteScreenState extends State<RegisterClienteScreen> {
                 '* Campos obligatorios\n\nAl registrarte aceptas nuestros Términos y Condiciones',
                 style: TextStyle(
                   fontSize: 12,
-                  color: colorScheme.onSurface.withOpacity(0.65),
+                  color: colorScheme.onSurface.withValues(alpha: 0.65),
                 ),
                 textAlign: TextAlign.center,
               ),
@@ -387,5 +387,7 @@ class _RegisterClienteScreenState extends State<RegisterClienteScreen> {
     super.dispose();
   }
 }
+
+
 
 

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:geolocator/geolocator.dart';
@@ -13,8 +14,7 @@ import '../widgets/theme_toggle_button.dart';
 class EmergenciaScreen extends StatefulWidget {
   final Vehiculo vehiculoAfectado;
 
-  const EmergenciaScreen({Key? key, required this.vehiculoAfectado})
-      : super(key: key);
+  const EmergenciaScreen({super.key, required this.vehiculoAfectado});
 
   @override
   State<EmergenciaScreen> createState() => _EmergenciaScreenState();
@@ -50,14 +50,16 @@ class _EmergenciaScreenState extends State<EmergenciaScreen> {
   bool _isListening = false;
   List<Map<String, dynamic>> _especialidades = [];
   List<Map<String, dynamic>> _servicios = [];
-  Set<String> _especialidadesSeleccionadas = {};
-  Set<String> _serviciosSeleccionados = {};
+  final Set<String> _especialidadesSeleccionadas = {};
+  final Set<String> _serviciosSeleccionados = {};
   bool _loadingEspecialidades = true;
   bool _loadingServicios = true;
   // Cámara y fotos
   File? _fotoTomada;
+  Uint8List? _fotoTomadaBytes;
   bool _isProcessingImage = false;
   bool _isProcessingProblem = false;
+  bool _isSuggestingSmartService = false;
   final ImagePicker _imagePicker = ImagePicker();
 
   @override
@@ -82,14 +84,14 @@ class _EmergenciaScreenState extends State<EmergenciaScreen> {
   Future<void> _initializeSpeechToText() async {
     try {
       bool available = await _speechToText.initialize(
-        onError: (error) => print('Error Speech To Text: $error'),
-        onStatus: (status) => print('Status: $status'),
+        onError: (error) => debugPrint('Error Speech To Text: $error'),
+        onStatus: (status) => debugPrint('Status: $status'),
       );
       if (!available) {
-        print('Speech to text no disponible en este dispositivo');
+        debugPrint('Speech to text no disponible en este dispositivo');
       }
     } catch (e) {
-      print('Error inicializando speech to text: $e');
+      debugPrint('Error inicializando speech to text: $e');
     }
   }
 
@@ -253,6 +255,34 @@ class _EmergenciaScreenState extends State<EmergenciaScreen> {
     }
   }
 
+  Widget _buildFotoPreview() {
+    if (_fotoTomadaBytes != null && kIsWeb) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: Image.memory(
+          _fotoTomadaBytes!,
+          width: 84,
+          height: 84,
+          fit: BoxFit.cover,
+        ),
+      );
+    }
+
+    if (_fotoTomada != null) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: Image.file(
+          _fotoTomada!,
+          width: 84,
+          height: 84,
+          fit: BoxFit.cover,
+        ),
+      );
+    }
+
+    return const SizedBox.shrink();
+  }
+
   @override
   void dispose() {
     _mapController.dispose();
@@ -279,7 +309,7 @@ class _EmergenciaScreenState extends State<EmergenciaScreen> {
         });
       }
     } catch (e) {
-      print('Error cargando especialidades: $e');
+      debugPrint('Error cargando especialidades: $e');
       setState(() => _loadingEspecialidades = false);
     }
   }
@@ -300,7 +330,7 @@ class _EmergenciaScreenState extends State<EmergenciaScreen> {
         });
       }
     } catch (e) {
-      print('Error cargando servicios: $e');
+      debugPrint('Error cargando servicios: $e');
       setState(() => _loadingServicios = false);
     }
   }
@@ -327,7 +357,7 @@ class _EmergenciaScreenState extends State<EmergenciaScreen> {
           },
         );
       } catch (e) {
-        print('Excepción al iniciar escucha: $e');
+        debugPrint('Excepción al iniciar escucha: $e');
         setState(() => _isListening = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Error: $e')),
@@ -376,9 +406,13 @@ class _EmergenciaScreenState extends State<EmergenciaScreen> {
         imageQuality: 75,
         maxWidth: 1280,
       );
+      if (!mounted) return;
       if (photo != null) {
+        final bytes = await photo.readAsBytes();
+        if (!mounted) return;
         setState(() {
           _fotoTomada = File(photo.path);
+          _fotoTomadaBytes = bytes;
           _isProcessingImage = false;
         });
         ScaffoldMessenger.of(context).showSnackBar(
@@ -395,6 +429,7 @@ class _EmergenciaScreenState extends State<EmergenciaScreen> {
         );
       }
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error al acceder a la Cámara: $e')),
       );
@@ -408,9 +443,13 @@ class _EmergenciaScreenState extends State<EmergenciaScreen> {
         imageQuality: 75,
         maxWidth: 1280,
       );
+      if (!mounted) return;
       if (photo != null) {
+        final bytes = await photo.readAsBytes();
+        if (!mounted) return;
         setState(() {
           _fotoTomada = File(photo.path);
+          _fotoTomadaBytes = bytes;
           _isProcessingImage = false;
         });
         ScaffoldMessenger.of(context).showSnackBar(
@@ -427,6 +466,7 @@ class _EmergenciaScreenState extends State<EmergenciaScreen> {
         );
       }
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error al acceder a la Galería: $e')),
       );
@@ -455,7 +495,9 @@ class _EmergenciaScreenState extends State<EmergenciaScreen> {
 
     try {
       final resultado = await _emergenciaService.procesarImagenIncidente(
-        imagenArchivo: _fotoTomada!,
+        imagenArchivo: kIsWeb ? null : _fotoTomada!,
+        imagenBytes: _fotoTomadaBytes,
+        fileName: 'evidencia.jpg',
         evidenciaId:
             '${widget.vehiculoAfectado.id}-${DateTime.now().millisecondsSinceEpoch}',
       );
@@ -503,8 +545,120 @@ class _EmergenciaScreenState extends State<EmergenciaScreen> {
     }
   }
 
-  Future<void> _procesarProblemaConIA() async {
-    final texto = _descripcionController.text.trim();
+  void _setAnalisisLoading(bool value) {
+    if (!mounted) return;
+    setState(() {
+      _isProcessingProblem = value;
+      _isSuggestingSmartService = value;
+    });
+  }
+
+  List<String> _normalizarIdsSugeridos(
+    dynamic rawValue,
+    List<Map<String, dynamic>> catalogo,
+  ) {
+    if (rawValue == null) return [];
+
+    Iterable<dynamic> items;
+    if (rawValue is Iterable) {
+      items = rawValue;
+    } else {
+      items = [rawValue];
+    }
+
+    final ids = <String>[];
+    for (final item in items) {
+      if (item == null) continue;
+      if (item is String) {
+        final value = item.trim();
+        if (value.isNotEmpty) {
+          final matchPorId = catalogo.where(
+            (entry) => entry['id']?.toString() == value,
+          );
+          if (matchPorId.isNotEmpty) {
+            ids.add(matchPorId.first['id']?.toString() ?? value);
+            continue;
+          }
+
+          final matchPorNombre = catalogo.where(
+            (entry) => entry['nombre']?.toString().toLowerCase() == value.toLowerCase(),
+          );
+          if (matchPorNombre.isNotEmpty) {
+            ids.add(matchPorNombre.first['id']?.toString() ?? value);
+            continue;
+          }
+
+          ids.add(value);
+        }
+        continue;
+      }
+      if (item is Map) {
+        final map = Map<String, dynamic>.from(item);
+        final value = (map['id'] ??
+                map['id_servicio'] ??
+                map['id_especialidad'] ??
+                map['value'] ??
+                map['nombre'] ??
+                map['nombre_servicio'] ??
+                map['nombre_especialidad'])
+            ?.toString()
+            .trim();
+        if (value != null && value.isNotEmpty) {
+          final matchPorId = catalogo.where(
+            (entry) => entry['id']?.toString() == value,
+          );
+          if (matchPorId.isNotEmpty) {
+            ids.add(matchPorId.first['id']?.toString() ?? value);
+            continue;
+          }
+
+          final matchPorNombre = catalogo.where(
+            (entry) => entry['nombre']?.toString().toLowerCase() == value.toLowerCase(),
+          );
+          if (matchPorNombre.isNotEmpty) {
+            ids.add(matchPorNombre.first['id']?.toString() ?? value);
+            continue;
+          }
+
+          ids.add(value);
+        }
+        continue;
+      }
+      final value = item.toString().trim();
+      if (value.isNotEmpty) ids.add(value);
+    }
+
+    return ids.toSet().toList();
+  }
+
+  String? _nombreEspecialidadPorId(String id) {
+    final match = _especialidades.cast<Map<String, dynamic>>().where(
+          (item) => item['id']?.toString() == id,
+        );
+    if (match.isEmpty) return null;
+    return match.first['nombre']?.toString();
+  }
+
+  String? _nombreServicioPorId(String id) {
+    final match = _servicios.cast<Map<String, dynamic>>().where(
+          (item) => item['id']?.toString() == id,
+        );
+    if (match.isEmpty) return null;
+    return match.first['nombre']?.toString();
+  }
+
+  String _capitalizarEtiqueta(String value) {
+    final normalized = value.trim().toLowerCase().replaceAll('_', ' ');
+    return normalized.isEmpty
+        ? value
+        : normalized
+            .split(' ')
+            .where((part) => part.isNotEmpty)
+            .map((part) => '${part[0].toUpperCase()}${part.substring(1)}')
+            .join(' ');
+  }
+
+  Future<void> _aplicarAnalisisInteligente({required String texto}) async {
     if (texto.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -516,41 +670,111 @@ class _EmergenciaScreenState extends State<EmergenciaScreen> {
       return;
     }
 
-    if (_isProcessingProblem) return;
+    if (_isProcessingProblem || _isSuggestingSmartService) return;
 
-    setState(() {
-      _isProcessingProblem = true;
-    });
+    _setAnalisisLoading(true);
 
     try {
-      final result = await _emergenciaService.procesarProblemaTexto(
+      final problema = await _emergenciaService.procesarProblemaTexto(
         textoProblema: texto,
+        idVehiculo: widget.vehiculoAfectado.id,
+        categoriaIncidente: _categoria,
       );
 
-      final nivel =
-          (result['nivel_urgencia'] ?? '').toString().toUpperCase().trim();
-      const nivelesValidos = {'BAJO', 'MEDIO', 'ALTO', 'CRITICO'};
-
-      if (nivelesValidos.contains(nivel)) {
-        setState(() {
-          _nivelUrgencia = nivel;
-        });
+      final nivel = [
+        problema['nivel_urgencia'],
+        problema['prioridad'],
+      ]
+          .map((value) => value?.toString().toUpperCase().trim() ?? '')
+          .firstWhere(
+            (value) => const {'BAJO', 'MEDIO', 'ALTO', 'CRITICO'}.contains(value),
+            orElse: () => '',
+          );
+      if (nivel.isNotEmpty) {
+        _nivelUrgencia = nivel;
       }
 
-      final mensajeChatbot =
-          (result['mensaje_chatbot'] ?? '').toString().trim();
-      final accion = (result['accion_recomendada'] ?? '').toString().trim();
-      final mensajeFinal = mensajeChatbot.isNotEmpty
-          ? (accion.isNotEmpty ? '$mensajeChatbot\n$accion' : mensajeChatbot)
-          : 'Procesamiento completado. Nivel sugerido: $nivel';
+      final categoriaDetectada = [
+        problema['categoria_incidente'],
+        problema['categoria'],
+      ]
+          .map((value) => value?.toString().toUpperCase().trim() ?? '')
+          .firstWhere(
+            (value) => _categoriasDisponibles.contains(value),
+            orElse: () => '',
+          );
+      if (categoriaDetectada.isNotEmpty) {
+        _categoria = categoriaDetectada;
+      }
+
+      final especialidadesSugeridas = <String>{
+        ..._normalizarIdsSugeridos(
+          problema['especialidades_sugeridas'] ??
+              problema['especialidad_sugerida'] ??
+              problema['ids_especialidades_sugeridas'] ??
+              problema['id_especialidad_sugerida'],
+          _especialidades,
+        ),
+      };
+
+      final serviciosSugeridos = <String>{
+        ..._normalizarIdsSugeridos(
+          problema['servicios_sugeridos'] ??
+              problema['servicio_sugerido'] ??
+              problema['ids_servicios_sugeridos'] ??
+              problema['id_servicio_sugerido'],
+          _servicios,
+        ),
+      };
+
+      if (especialidadesSugeridas.isNotEmpty) {
+        _especialidadesSeleccionadas.addAll(especialidadesSugeridas);
+      }
+      if (serviciosSugeridos.isNotEmpty) {
+        _serviciosSeleccionados.addAll(serviciosSugeridos);
+      }
+
+      final motivo = [
+        problema['resumen'],
+        problema['motivo'],
+        problema['explicacion'],
+      ]
+          .map((value) => value?.toString().trim() ?? '')
+          .firstWhere((value) => value.isNotEmpty, orElse: () => '');
+
+      final especialidadesTexto = especialidadesSugeridas
+          .map((id) => _nombreEspecialidadPorId(id) ?? id)
+          .toList();
+      final serviciosTexto = serviciosSugeridos
+          .map((id) => _nombreServicioPorId(id) ?? id)
+          .toList();
+
+      final detalles = <String>[];
+      if (nivel.isNotEmpty) {
+        detalles.add('urgencia ${_capitalizarEtiqueta(nivel)}');
+      }
+      if (_categoria != null && _categoria!.isNotEmpty) {
+        detalles.add('categoría ${_categoriaLegible(_categoria!)}');
+      }
+      if (especialidadesTexto.isNotEmpty) {
+        detalles.add('especialidad ${especialidadesTexto.join(', ')}');
+      }
+      if (serviciosTexto.isNotEmpty) {
+        detalles.add('servicios ${serviciosTexto.join(', ')}');
+      }
 
       if (mounted) {
+        setState(() {});
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(mensajeFinal),
+            content: Text(
+              detalles.isEmpty
+                  ? 'Análisis completado'
+                  : 'Identificado: ${detalles.join(', ')}${motivo.isNotEmpty ? '. $motivo' : ''}',
+            ),
             behavior: SnackBarBehavior.floating,
             duration: const Duration(seconds: 6),
-            backgroundColor: const Color(0xFF1D6F42),
+            backgroundColor: const Color(0xFF0B7285),
           ),
         );
       }
@@ -558,7 +782,7 @@ class _EmergenciaScreenState extends State<EmergenciaScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('No se pudo procesar el problema: $e'),
+            content: Text('No se pudo analizar el problema: $e'),
             behavior: SnackBarBehavior.floating,
             backgroundColor: const Color(0xFFC92A2A),
           ),
@@ -566,11 +790,15 @@ class _EmergenciaScreenState extends State<EmergenciaScreen> {
       }
     } finally {
       if (mounted) {
-        setState(() {
-          _isProcessingProblem = false;
-        });
+        _setAnalisisLoading(false);
       }
     }
+  }
+
+  Future<void> _procesarProblemaConIA() async {
+    await _aplicarAnalisisInteligente(
+      texto: _descripcionController.text.trim(),
+    );
   }
 
   @override
@@ -606,7 +834,7 @@ class _EmergenciaScreenState extends State<EmergenciaScreen> {
           Container(
             margin: const EdgeInsets.only(right: 10),
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.16),
+              color: Colors.white.withValues(alpha: 0.16),
               shape: BoxShape.circle,
             ),
             child: const ThemeToggleButton(),
@@ -620,11 +848,11 @@ class _EmergenciaScreenState extends State<EmergenciaScreen> {
             fillColor: isDark ? const Color(0xFF181B24) : Colors.white,
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(14),
-              borderSide: BorderSide(color: cs.outlineVariant.withOpacity(0.6)),
+              borderSide: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.6)),
             ),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(14),
-              borderSide: BorderSide(color: cs.outlineVariant.withOpacity(0.6)),
+              borderSide: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.6)),
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(14),
@@ -639,8 +867,8 @@ class _EmergenciaScreenState extends State<EmergenciaScreen> {
                 RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             collapsedShape:
                 RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            iconColor: cs.onSurface.withOpacity(0.8),
-            collapsedIconColor: cs.onSurface.withOpacity(0.8),
+            iconColor: cs.onSurface.withValues(alpha: 0.8),
+            collapsedIconColor: cs.onSurface.withValues(alpha: 0.8),
             textColor: cs.onSurface,
             collapsedTextColor: cs.onSurface,
           ),
@@ -669,7 +897,7 @@ class _EmergenciaScreenState extends State<EmergenciaScreen> {
                     ),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(isDark ? 0.25 : 0.08),
+                        color: Colors.black.withValues(alpha: isDark ? 0.25 : 0.08),
                         blurRadius: 14,
                         offset: const Offset(0, 5),
                       ),
@@ -833,7 +1061,7 @@ class _EmergenciaScreenState extends State<EmergenciaScreen> {
                 ),
                 const SizedBox(height: 8),
                 DropdownButtonFormField<String>(
-                  value: _nivelUrgencia,
+                  initialValue: _nivelUrgencia,
                   decoration: InputDecoration(
                     prefixIcon: const Icon(Icons.priority_high),
                     border: OutlineInputBorder(
@@ -864,7 +1092,7 @@ class _EmergenciaScreenState extends State<EmergenciaScreen> {
                 ),
                 const SizedBox(height: 8),
                 DropdownButtonFormField<String>(
-                  value: _categoria,
+                  initialValue: _categoria,
                   decoration: InputDecoration(
                     prefixIcon: const Icon(Icons.warning_amber),
                     hintText: 'Selecciona una Categoría',
@@ -926,15 +1154,7 @@ class _EmergenciaScreenState extends State<EmergenciaScreen> {
                         const SizedBox(height: 12),
                         Row(
                           children: [
-                            ClipRRect(
-                              borderRadius: BorderRadius.circular(8),
-                              child: Image.file(
-                                _fotoTomada!,
-                                width: 84,
-                                height: 84,
-                                fit: BoxFit.cover,
-                              ),
-                            ),
+                            _buildFotoPreview(),
                             const SizedBox(width: 12),
                             const Expanded(
                               child: Text(
@@ -1161,7 +1381,7 @@ class _EmergenciaScreenState extends State<EmergenciaScreen> {
                         Border.all(color: const Color(0xFF5C7CFA), width: 2),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.1),
+                        color: Colors.black.withValues(alpha: 0.1),
                         blurRadius: 8,
                         offset: const Offset(0, 2),
                       ),
@@ -1196,10 +1416,10 @@ class _EmergenciaScreenState extends State<EmergenciaScreen> {
                                       _radioEstadio * 1000, // Radio en metros
                                   useRadiusInMeter: true,
                                   color: const Color(0xFF4FC3F7)
-                                      .withOpacity(0.15), // Celeste muy pálido
+                                      .withValues(alpha: 0.15), // Celeste muy pálido
                                   borderStrokeWidth: 2.5,
                                   borderColor: const Color(0xFF0288D1)
-                                      .withOpacity(
+                                      .withValues(alpha: 
                                           0.6), // Borde azul más visible
                                 ),
                               ],
@@ -1232,7 +1452,7 @@ class _EmergenciaScreenState extends State<EmergenciaScreen> {
                               borderRadius: BorderRadius.circular(6),
                               boxShadow: [
                                 BoxShadow(
-                                  color: Colors.black.withOpacity(0.2),
+                                  color: Colors.black.withValues(alpha: 0.2),
                                   blurRadius: 4,
                                 ),
                               ],
@@ -1258,7 +1478,7 @@ class _EmergenciaScreenState extends State<EmergenciaScreen> {
                               borderRadius: BorderRadius.circular(8),
                               boxShadow: [
                                 BoxShadow(
-                                  color: Colors.black.withOpacity(0.2),
+                                  color: Colors.black.withValues(alpha: 0.2),
                                   blurRadius: 4,
                                 ),
                               ],
@@ -1429,3 +1649,7 @@ class _EmergenciaScreenState extends State<EmergenciaScreen> {
     );
   }
 }
+
+
+
+

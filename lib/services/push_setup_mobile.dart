@@ -1,5 +1,6 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/foundation.dart';
 
 import '../firebase_options.dart';
 
@@ -9,11 +10,12 @@ Future<void> _firebaseBackgroundMessageHandler(RemoteMessage message) async {
     options: DefaultFirebaseOptions.currentPlatform,
   );
 
-  print('[FCM-BG] Mensaje en background: ${message.notification?.title}');
-  print('[FCM-BG] Body: ${message.notification?.body}');
-  print('[FCM-BG] Data: ${message.data}');
+  debugPrint('[FCM-BG] Mensaje en background: ${message.notification?.title}');
+  debugPrint('[FCM-BG] Body: ${message.notification?.body}');
+  debugPrint('[FCM-BG] Data: ${message.data}');
 }
 
 Future<void> configurePushBackgroundHandler() async {
   FirebaseMessaging.onBackgroundMessage(_firebaseBackgroundMessageHandler);
 }
+

@@ -3,7 +3,7 @@ import '../services/cliente_service.dart';
 import '../widgets/theme_toggle_button.dart';
 
 class EditarPerfilScreen extends StatefulWidget {
-  const EditarPerfilScreen({Key? key}) : super(key: key);
+  const EditarPerfilScreen({super.key});
 
   @override
   State<EditarPerfilScreen> createState() => _EditarPerfilScreenState();
@@ -39,6 +39,7 @@ class _EditarPerfilScreenState extends State<EditarPerfilScreen> {
   Future<void> _cargarPerfil() async {
     try {
       final perfil = await _clienteService.getMiPerfil();
+      if (!mounted) return;
       setState(() {
         _nombreController.text = perfil.nombre;
         _apellidoController.text = perfil.apellido;
@@ -49,6 +50,7 @@ class _EditarPerfilScreenState extends State<EditarPerfilScreen> {
         _isLoading = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _error = 'Error al cargar perfil: $e';
         _isLoading = false;
@@ -303,10 +305,10 @@ class _EditarPerfilScreenState extends State<EditarPerfilScreen> {
       decoration: BoxDecoration(
         color: isDark ? const Color(0xFF181B24) : Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: cs.outlineVariant.withOpacity(0.45)),
+        border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.45)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(isDark ? 0.22 : 0.05),
+            color: Colors.black.withValues(alpha: isDark ? 0.22 : 0.05),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -329,3 +331,5 @@ class _EditarPerfilScreenState extends State<EditarPerfilScreen> {
     );
   }
 }
+
+

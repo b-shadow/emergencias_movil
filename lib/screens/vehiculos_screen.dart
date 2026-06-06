@@ -9,7 +9,7 @@ import '../widgets/theme_toggle_button.dart';
 class VehiculosScreen extends StatefulWidget {
   final String? seleccionarPara;
 
-  const VehiculosScreen({Key? key, this.seleccionarPara}) : super(key: key);
+  const VehiculosScreen({super.key, this.seleccionarPara});
 
   @override
   State<VehiculosScreen> createState() => _VehiculosScreenState();
@@ -38,12 +38,14 @@ class _VehiculosScreenState extends State<VehiculosScreen> {
       });
 
       final vehiculos = await _vehiculoService.getVehiculos();
+      if (!mounted) return;
 
       setState(() {
         _vehiculos = vehiculos;
         _isLoading = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _error = 'Error: $e';
         _isLoading = false;
@@ -52,35 +54,38 @@ class _VehiculosScreenState extends State<VehiculosScreen> {
   }
 
   Future<void> _eliminarVehiculo(String id) async {
+    final rootContext = context;
     showDialog(
-      context: context,
-      builder: (BuildContext context) {
+      context: rootContext,
+      builder: (BuildContext dialogContext) {
         return AlertDialog(
           title: const Text('¿Deseas eliminar este vehículo?'),
           content: const Text('Esta acción no se puede deshacer.'),
           actions: [
             TextButton(
-              onPressed: () => Navigator.of(context).pop(),
+              onPressed: () => Navigator.of(dialogContext).pop(),
               child: const Text('Cancelar'),
             ),
             TextButton(
               onPressed: () async {
-                Navigator.of(context).pop();
+                Navigator.of(dialogContext).pop();
                 try {
                   await _vehiculoService.deleteVehiculo(id);
                   _cargarDatos();
+                  if (!rootContext.mounted) return;
                   if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
+                    ScaffoldMessenger.of(rootContext).showSnackBar(
                       const SnackBar(content: Text('Vehículo eliminado')),
                     );
                   }
                 } catch (e) {
+                  if (!rootContext.mounted) return;
                   if (mounted) {
                     String msg = 'Error: $e';
                     if (e.toString().contains('404')) {
                       msg = 'El vehículo no está disponible';
                     }
-                    ScaffoldMessenger.of(context).showSnackBar(
+                    ScaffoldMessenger.of(rootContext).showSnackBar(
                       SnackBar(content: Text(msg)),
                     );
                   }
@@ -179,7 +184,7 @@ class _VehiculosScreenState extends State<VehiculosScreen> {
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.2),
+            color: Colors.black.withValues(alpha: 0.2),
             blurRadius: 14,
             offset: const Offset(0, 4),
           ),
@@ -305,7 +310,7 @@ class _VehiculosScreenState extends State<VehiculosScreen> {
             'Gestiona, edita y agrega tus vehículos registrados',
             style: TextStyle(
               fontSize: 17,
-              color: Theme.of(context).colorScheme.onSurface.withOpacity(0.65),
+              color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.65),
             ),
           ),
           const SizedBox(height: 16),
@@ -332,7 +337,7 @@ class _VehiculosScreenState extends State<VehiculosScreen> {
           ),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(isDark ? 0.28 : 0.08),
+              color: Colors.black.withValues(alpha: isDark ? 0.28 : 0.08),
               blurRadius: 16,
               offset: const Offset(0, 6),
             ),
@@ -378,7 +383,7 @@ class _VehiculosScreenState extends State<VehiculosScreen> {
                         '${v.marca} ${v.modelo} (${v.anio})',
                         style: TextStyle(
                           fontSize: 17,
-                          color: Theme.of(context).colorScheme.onSurface.withOpacity(0.75),
+                          color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.75),
                         ),
                       ),
                     ],
@@ -433,3 +438,8 @@ class _VehiculosScreenState extends State<VehiculosScreen> {
     );
   }
 }
+
+
+
+
+

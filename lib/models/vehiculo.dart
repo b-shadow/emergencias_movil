@@ -6,6 +6,8 @@ class Vehiculo {
   final int anio;
   final String? color;
   final String? tipoCombustible;
+  final String? tipoSeguro;
+  final String? aseguradora;
   final String? observaciones;
 
   Vehiculo({
@@ -16,6 +18,8 @@ class Vehiculo {
     required this.anio,
     this.color,
     this.tipoCombustible,
+    this.tipoSeguro,
+    this.aseguradora,
     this.observaciones,
   });
 
@@ -29,6 +33,8 @@ class Vehiculo {
       anio: json['anio'],
       color: json['color'],
       tipoCombustible: json['tipo_combustible'],
+      tipoSeguro: json['tipo_seguro'],
+      aseguradora: json['aseguradora'],
       observaciones: json['observaciones'],
     );
   }
@@ -42,6 +48,8 @@ class Vehiculo {
       'anio': anio,
       'color': color,
       'tipo_combustible': tipoCombustible,
+      'tipo_seguro': tipoSeguro,
+      'aseguradora': aseguradora,
       'observaciones': observaciones,
     };
   }

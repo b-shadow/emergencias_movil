@@ -64,9 +64,10 @@ class _NotificacionesScreenState extends State<NotificacionesScreen> {
   }
 
   Future<void> _logout() async {
+    final rootContext = context;
     showDialog(
-      context: context,
-      builder: (BuildContext context) {
+      context: rootContext,
+      builder: (BuildContext dialogContext) {
         return AlertDialog(
           title: const Text('Cerrar sesión'),
           content: const Text('¿Deseas cerrar tu sesión?'),
@@ -77,15 +78,14 @@ class _NotificacionesScreenState extends State<NotificacionesScreen> {
             ),
             TextButton(
               onPressed: () async {
-                Navigator.of(context).pop();
+                Navigator.of(dialogContext).pop();
                 await _authService.logout();
-                if (mounted) {
-                  Navigator.of(context).pushAndRemoveUntil(
-                    MaterialPageRoute(
-                        builder: (context) => const LoginScreen()),
-                    (route) => false,
-                  );
-                }
+                if (!rootContext.mounted) return;
+                Navigator.of(rootContext).pushAndRemoveUntil(
+                  MaterialPageRoute(
+                      builder: (_) => const LoginScreen()),
+                  (route) => false,
+                );
               },
               child: const Text('Sí, cerrar sesión',
                   style: TextStyle(color: Colors.red)),
@@ -135,7 +135,7 @@ class _NotificacionesScreenState extends State<NotificacionesScreen> {
               Text(
                 notificacion.mensaje,
                 style: TextStyle(
-                  color: cs.onSurface.withOpacity(0.78),
+                  color: cs.onSurface.withValues(alpha: 0.78),
                   fontSize: 15,
                   height: 1.45,
                 ),
@@ -144,7 +144,7 @@ class _NotificacionesScreenState extends State<NotificacionesScreen> {
               Text(
                 _formatFecha(notificacion.fecha),
                 style: TextStyle(
-                    color: cs.onSurface.withOpacity(0.58), fontSize: 12),
+                    color: cs.onSurface.withValues(alpha: 0.58), fontSize: 12),
               ),
               if (notificacion.esNoLeida) ...[
                 const SizedBox(height: 16),
@@ -252,7 +252,7 @@ class _NotificacionesScreenState extends State<NotificacionesScreen> {
                 decoration: BoxDecoration(
                   color: isDark ? const Color(0xFF191C25) : Colors.white,
                   borderRadius: BorderRadius.circular(28),
-                  border: Border.all(color: cs.outlineVariant.withOpacity(0.4)),
+                  border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.4)),
                 ),
                 child: SegmentedButton<String>(
                   showSelectedIcon: false,
@@ -322,13 +322,13 @@ class _NotificacionesScreenState extends State<NotificacionesScreen> {
                             Icon(
                               Icons.notifications_off_outlined,
                               size: 54,
-                              color: cs.onSurface.withOpacity(0.35),
+                              color: cs.onSurface.withValues(alpha: 0.35),
                             ),
                             const SizedBox(height: 14),
                             Text(
                               'No hay notificaciones',
                               style: TextStyle(
-                                  color: cs.onSurface.withOpacity(0.7)),
+                                  color: cs.onSurface.withValues(alpha: 0.7)),
                             ),
                           ],
                         ),
@@ -347,13 +347,13 @@ class _NotificacionesScreenState extends State<NotificacionesScreen> {
                               borderRadius: BorderRadius.circular(16),
                               border: Border.all(
                                 color: notif.esNoLeida
-                                    ? const Color(0xFFFF8A8D).withOpacity(0.6)
-                                    : cs.outlineVariant.withOpacity(0.35),
+                                    ? const Color(0xFFFF8A8D).withValues(alpha: 0.6)
+                                    : cs.outlineVariant.withValues(alpha: 0.35),
                               ),
                               boxShadow: [
                                 BoxShadow(
                                   color: Colors.black
-                                      .withOpacity(isDark ? 0.24 : 0.06),
+                                      .withValues(alpha: isDark ? 0.24 : 0.06),
                                   blurRadius: 12,
                                   offset: const Offset(0, 4),
                                 ),
@@ -394,7 +394,7 @@ class _NotificacionesScreenState extends State<NotificacionesScreen> {
                                       maxLines: 2,
                                       overflow: TextOverflow.ellipsis,
                                       style: TextStyle(
-                                        color: cs.onSurface.withOpacity(0.7),
+                                        color: cs.onSurface.withValues(alpha: 0.7),
                                         fontSize: 13,
                                       ),
                                     ),
@@ -402,7 +402,7 @@ class _NotificacionesScreenState extends State<NotificacionesScreen> {
                                     Text(
                                       _formatFecha(notif.fecha),
                                       style: TextStyle(
-                                        color: cs.onSurface.withOpacity(0.54),
+                                        color: cs.onSurface.withValues(alpha: 0.54),
                                         fontSize: 11,
                                       ),
                                     ),
@@ -455,7 +455,7 @@ class _NotificacionesScreenState extends State<NotificacionesScreen> {
       decoration: BoxDecoration(
         color: isDark ? const Color(0xFF191C25) : Colors.white,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: cs.outlineVariant.withOpacity(0.4)),
+        border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.4)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -463,7 +463,7 @@ class _NotificacionesScreenState extends State<NotificacionesScreen> {
           Text(
             title,
             style: TextStyle(
-              color: cs.onSurface.withOpacity(0.68),
+              color: cs.onSurface.withValues(alpha: 0.68),
               fontSize: 12,
             ),
           ),
@@ -481,3 +481,4 @@ class _NotificacionesScreenState extends State<NotificacionesScreen> {
     );
   }
 }
+

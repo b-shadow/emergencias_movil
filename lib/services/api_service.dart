@@ -1,23 +1,24 @@
+import 'package:flutter/foundation.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'auth_service.dart';
 
 class ApiService {
-  static const String baseUrl = String.fromEnvironment('API_BASE_URL', defaultValue: 'https://emergencias-backend.onrender.com/api/v1');
+  static String get baseUrl => AuthService.baseUrl;
   final AuthService _authService = AuthService();
 
   Future<dynamic> get(String endpoint) async {
     try {
       final headers = await _authService.getAuthHeaders();
-      print('GET Request Headers: $headers');  // DEBUG
-      print('GET Request URL: $baseUrl$endpoint');  // DEBUG
+      debugPrint('GET Request Headers: $headers');  // DEBUG
+      debugPrint('GET Request URL: $baseUrl$endpoint');  // DEBUG
       final response = await http.get(
         Uri.parse('$baseUrl$endpoint'),
         headers: headers,
       ).timeout(const Duration(seconds: 10));
 
-      print('GET Response Status: ${response.statusCode}');  // DEBUG
-      print('GET Response Body: ${response.body}');  // DEBUG
+      debugPrint('GET Response Status: ${response.statusCode}');  // DEBUG
+      debugPrint('GET Response Body: ${response.body}');  // DEBUG
       return _handleResponse(response);
     } catch (e) {
       throw Exception('Error en GET $endpoint: $e');
@@ -104,4 +105,5 @@ class ApiService {
     }
   }
 }
+
 

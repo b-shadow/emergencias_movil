@@ -25,6 +25,8 @@ class VehiculoService {
     required int anio,
     String? color,
     String? tipoCombustible,
+    String? tipoSeguro,
+    String? aseguradora,
     String? observaciones,
   }) async {
     try {
@@ -36,6 +38,8 @@ class VehiculoService {
       };
       if (color != null) payload['color'] = color;
       if (tipoCombustible != null) payload['tipo_combustible'] = tipoCombustible;
+      if (tipoSeguro != null) payload['tipo_seguro'] = tipoSeguro;
+      if (aseguradora != null) payload['aseguradora'] = aseguradora;
       if (observaciones != null) payload['observaciones'] = observaciones;
       
       final response = await _apiService.post('/clientes/me/vehiculos', payload);
@@ -54,6 +58,8 @@ class VehiculoService {
     required int anio,
     String? color,
     String? tipoCombustible,
+    String? tipoSeguro,
+    String? aseguradora,
     String? observaciones,
   }) async {
     try {
@@ -65,9 +71,11 @@ class VehiculoService {
       };
       if (color != null) payload['color'] = color;
       if (tipoCombustible != null) payload['tipo_combustible'] = tipoCombustible;
+      if (tipoSeguro != null) payload['tipo_seguro'] = tipoSeguro;
+      if (aseguradora != null) payload['aseguradora'] = aseguradora;
       if (observaciones != null) payload['observaciones'] = observaciones;
       
-      final response = await _apiService.put('/clientes/me/vehiculos/$id', payload);
+      final response = await _apiService.patch('/clientes/me/vehiculos/$id', payload);
       return Vehiculo.fromJson(response);
     } catch (e) {
       throw Exception('Error al actualizar vehículo: $e');

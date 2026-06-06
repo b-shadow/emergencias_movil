@@ -3,7 +3,7 @@ import '../services/vehiculo_service.dart';
 import '../widgets/theme_toggle_button.dart';
 
 class CreateVehiculoScreen extends StatefulWidget {
-  const CreateVehiculoScreen({Key? key}) : super(key: key);
+  const CreateVehiculoScreen({super.key});
 
   @override
   State<CreateVehiculoScreen> createState() => _CreateVehiculoScreenState();
@@ -19,7 +19,9 @@ class _CreateVehiculoScreenState extends State<CreateVehiculoScreen> {
   final _anioController = TextEditingController();
   final _colorController = TextEditingController();
   final _combustibleController = TextEditingController();
+  final _aseguradoraController = TextEditingController();
   final _observacionesController = TextEditingController();
+  String _tipoSeguro = 'SIN_SEGURO';
   
   bool _isLoading = false;
 
@@ -31,6 +33,7 @@ class _CreateVehiculoScreenState extends State<CreateVehiculoScreen> {
     _anioController.dispose();
     _colorController.dispose();
     _combustibleController.dispose();
+    _aseguradoraController.dispose();
     _observacionesController.dispose();
     super.dispose();
   }
@@ -52,6 +55,8 @@ class _CreateVehiculoScreenState extends State<CreateVehiculoScreen> {
         anio: int.parse(_anioController.text),
         color: _colorController.text.isEmpty ? null : _colorController.text,
         tipoCombustible: _combustibleController.text.isEmpty ? null : _combustibleController.text,
+        tipoSeguro: _tipoSeguro,
+        aseguradora: _aseguradoraController.text.isEmpty ? null : _aseguradoraController.text,
         observaciones: _observacionesController.text.isEmpty ? null : _observacionesController.text,
       );
 
@@ -190,6 +195,41 @@ class _CreateVehiculoScreenState extends State<CreateVehiculoScreen> {
                 ),
               ),
               const SizedBox(height: 16),
+              DropdownButtonFormField<String>(
+                initialValue: _tipoSeguro,
+                decoration: InputDecoration(
+                  labelText: 'Tipo de Seguro',
+                  prefixIcon: const Icon(Icons.security),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                items: const [
+                  DropdownMenuItem(value: 'SIN_SEGURO', child: Text('Sin seguro')),
+                  DropdownMenuItem(value: 'BASICO', child: Text('Seguro básico')),
+                  DropdownMenuItem(value: 'COMPLETO', child: Text('Seguro completo')),
+                ],
+                onChanged: (value) {
+                  if (value != null) {
+                    setState(() {
+                      _tipoSeguro = value;
+                    });
+                  }
+                },
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _aseguradoraController,
+                decoration: InputDecoration(
+                  labelText: 'Aseguradora',
+                  hintText: 'Ej: Bisa Seguros',
+                  prefixIcon: const Icon(Icons.business),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
               TextFormField(
                 controller: _observacionesController,
                 decoration: InputDecoration(
@@ -242,3 +282,4 @@ class _CreateVehiculoScreenState extends State<CreateVehiculoScreen> {
     );
   }
 }
+

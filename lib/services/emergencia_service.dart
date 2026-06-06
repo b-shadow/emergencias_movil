@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -5,8 +6,7 @@ import 'package:http/http.dart' as http;
 import 'auth_service.dart';
 
 class EmergenciaService {
-  static const String baseUrl = String.fromEnvironment('API_BASE_URL',
-      defaultValue: 'https://emergencias-backend.onrender.com/api/v1');
+  static String get baseUrl => AuthService.baseUrl;
   static const int visionTimeoutSeconds = int.fromEnvironment(
     'VISION_TIMEOUT_SECONDS',
     defaultValue: 90,
@@ -151,17 +151,20 @@ class EmergenciaService {
         request.fields['evidencia_id'] = evidenciaId;
       }
 
-      if (imagenArchivo != null) {
-        request.files.add(
-          await http.MultipartFile.fromPath('image', imagenArchivo.path),
-        );
-      } else {
+      if (imagenBytes != null && imagenBytes.isNotEmpty) {
         request.files.add(
           http.MultipartFile.fromBytes(
             'image',
-            imagenBytes!,
+            imagenBytes,
             filename: fileName ?? 'evidencia.jpg',
           ),
+        );
+      } else if (imagenArchivo != null) {
+        if (kIsWeb) {
+          throw Exception('En web se requieren bytes de imagen, no una ruta de archivo');
+        }
+        request.files.add(
+          await http.MultipartFile.fromPath('image', imagenArchivo.path),
         );
       }
 
@@ -194,17 +197,26 @@ class EmergenciaService {
   // Procesar descripción del problema con IA (backend -> Groq)
   Future<Map<String, dynamic>> procesarProblemaTexto({
     required String textoProblema,
+    String? idVehiculo,
+    String? categoriaIncidente,
   }) async {
     try {
       final headers = await _authService.getAuthHeaders();
+      final body = <String, dynamic>{
+        'texto': textoProblema,
+      };
+      if (idVehiculo != null && idVehiculo.isNotEmpty) {
+        body['id_vehiculo'] = idVehiculo;
+      }
+      if (categoriaIncidente != null && categoriaIncidente.isNotEmpty) {
+        body['categoria_incidente'] = categoriaIncidente;
+      }
       final response = await http
           .post(
             Uri.parse(
                 '$baseUrl/solicitudes_emergencia/tools/procesar-problema'),
             headers: headers,
-            body: jsonEncode({
-              'texto': textoProblema,
-            }),
+            body: jsonEncode(body),
           )
           .timeout(const Duration(seconds: 35));
 
@@ -227,6 +239,47 @@ class EmergenciaService {
       throw Exception('Tiempo de espera agotado al procesar el problema');
     } catch (e) {
       throw Exception('No se pudo procesar el problema con IA: $e');
+    }
+  }
+
+  // Sugerencia inteligente de servicio/especialidad previa a crear solicitud
+  Future<Map<String, dynamic>> sugerirServicioInteligente({
+    required String descripcion,
+    required String idVehiculo,
+    String? categoriaIncidente,
+  }) async {
+    try {
+      final headers = await _authService.getAuthHeaders();
+      final body = <String, dynamic>{
+        'descripcion': descripcion,
+        'id_vehiculo': idVehiculo,
+      };
+      if (categoriaIncidente != null && categoriaIncidente.isNotEmpty) {
+        body['categoria_incidente'] = categoriaIncidente;
+      }
+
+      final response = await http
+          .post(
+            Uri.parse(
+                '$baseUrl/solicitudes_emergencia/tools/sugerir-servicio-inteligente'),
+            headers: headers,
+            body: jsonEncode(body),
+          )
+          .timeout(const Duration(seconds: 20));
+
+      final decoded = jsonDecode(response.body);
+      if (response.statusCode == 200) {
+        return Map<String, dynamic>.from(decoded as Map);
+      }
+      throw Exception(
+        decoded is Map<String, dynamic>
+            ? (decoded['detail'] ?? decoded['error'] ?? 'Error ${response.statusCode}')
+            : 'Error ${response.statusCode}',
+      );
+    } on TimeoutException {
+      throw Exception('Tiempo de espera agotado al obtener sugerencia inteligente');
+    } catch (e) {
+      throw Exception('No se pudo obtener sugerencia inteligente: $e');
     }
   }
 

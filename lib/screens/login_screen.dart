@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
-import 'dashboard_screen.dart';
-import 'register_cliente_screen.dart';
-import 'forgot_password_screen.dart';
+
 import '../services/auth_service.dart';
 import '../services/dispositivo_push_service_stub.dart'
     if (dart.library.io) '../services/dispositivo_push_service.dart';
 import '../widgets/theme_toggle_button.dart';
+import 'dashboard_screen.dart';
+import 'forgot_password_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -19,8 +19,16 @@ class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController _passwordController = TextEditingController();
   final AuthService _authService = AuthService();
   final DispositivoPushService _dispositivoPushService = DispositivoPushService();
+
   bool _ocultarPassword = true;
   bool _isLoading = false;
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -56,7 +64,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     borderRadius: BorderRadius.circular(26),
                     boxShadow: [
                       BoxShadow(
-                        color: const Color(0xFFFF5A5F).withOpacity(0.35),
+                        color: const Color(0xFFFF5A5F).withValues(alpha: 0.35),
                         blurRadius: 24,
                         offset: const Offset(0, 10),
                       ),
@@ -89,15 +97,15 @@ class _LoginScreenState extends State<LoginScreen> {
                   padding: const EdgeInsets.fromLTRB(16, 20, 16, 18),
                   decoration: BoxDecoration(
                     color: isDark
-                        ? const Color(0xFF0D1628).withOpacity(0.92)
-                        : Colors.white.withOpacity(0.92),
+                        ? const Color(0xFF0D1628).withValues(alpha: 0.92)
+                        : Colors.white.withValues(alpha: 0.92),
                     borderRadius: BorderRadius.circular(24),
                     border: Border.all(
                       color: isDark ? Colors.white10 : const Color(0xFFE5E7EB),
                     ),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(isDark ? 0.38 : 0.08),
+                        color: Colors.black.withValues(alpha: isDark ? 0.38 : 0.08),
                         blurRadius: 24,
                         offset: const Offset(0, 10),
                       ),
@@ -161,7 +169,7 @@ class _LoginScreenState extends State<LoginScreen> {
                               borderRadius: BorderRadius.circular(16),
                             ),
                             disabledBackgroundColor:
-                                const Color(0xFFFF4D57).withOpacity(0.55),
+                                const Color(0xFFFF4D57).withValues(alpha: 0.55),
                           ),
                           onPressed: _isLoading ? null : _handleLogin,
                           child: _isLoading
@@ -194,18 +202,13 @@ class _LoginScreenState extends State<LoginScreen> {
                     Text(
                       '¿No tienes cuenta?',
                       style: TextStyle(
-                        color: colorScheme.onSurface.withOpacity(0.75),
+                        color: colorScheme.onSurface.withValues(alpha: 0.75),
                         fontSize: 16,
                       ),
                     ),
                     TextButton(
                       onPressed: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const RegisterClienteScreen(),
-                          ),
-                        );
+                        Navigator.pushNamed(context, '/register-cliente');
                       },
                       child: const Text(
                         'Regístrate',
@@ -291,16 +294,16 @@ class _LoginScreenState extends State<LoginScreen> {
         _passwordController.text,
       );
 
-      if (mounted) {
-        await _dispositivoPushService.initForAuthenticatedUser();
-        _showSuccessSnackBar('¡Bienvenido ${tokenResponse.nombreCompleto}!');
+      if (!mounted) return;
 
-        if (mounted) {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (context) => const DashboardScreen()),
-          );
-        }
+      await _dispositivoPushService.initForAuthenticatedUser();
+      _showSuccessSnackBar('¡Bienvenido ${tokenResponse.nombreCompleto}!');
+
+      if (mounted) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => const DashboardScreen()),
+        );
       }
     } catch (e) {
       if (mounted) {
@@ -323,16 +326,8 @@ class _LoginScreenState extends State<LoginScreen> {
   void _showErrorSnackBar(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Row(
-          children: [
-            const Icon(Icons.error_outline, color: Colors.white),
-            const SizedBox(width: 12),
-            Expanded(child: Text(message)),
-          ],
-        ),
-        backgroundColor: Colors.red,
-        duration: const Duration(seconds: 4),
-        behavior: SnackBarBehavior.floating,
+        content: Text(message),
+        backgroundColor: Colors.redAccent,
       ),
     );
   }
@@ -340,24 +335,10 @@ class _LoginScreenState extends State<LoginScreen> {
   void _showSuccessSnackBar(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Row(
-          children: [
-            const Icon(Icons.check_circle, color: Colors.white),
-            const SizedBox(width: 12),
-            Expanded(child: Text(message)),
-          ],
-        ),
+        content: Text(message),
         backgroundColor: Colors.green,
-        duration: const Duration(seconds: 2),
-        behavior: SnackBarBehavior.floating,
       ),
     );
   }
-
-  @override
-  void dispose() {
-    _emailController.dispose();
-    _passwordController.dispose();
-    super.dispose();
-  }
 }
+
