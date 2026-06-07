@@ -8,28 +8,34 @@ import 'package:latlong2/latlong.dart';
 import '../services/tracking_service.dart';
 
 class TrabajadorTrackingScreen extends StatefulWidget {
-  const TrabajadorTrackingScreen({super.key});
+  final Map<String, dynamic> ordenInicial;
+
+  const TrabajadorTrackingScreen({
+    super.key,
+    required this.ordenInicial,
+  });
 
   @override
-  State<TrabajadorTrackingScreen> createState() => _TrabajadorTrackingScreenState();
+  State<TrabajadorTrackingScreen> createState() =>
+      _TrabajadorTrackingScreenState();
 }
 
 class _TrabajadorTrackingScreenState extends State<TrabajadorTrackingScreen> {
   final TrackingService _trackingService = TrackingService();
-  List<dynamic> _ordenes = [];
   Map<String, dynamic>? _actual;
   Timer? _timer;
   Timer? _wsPingTimer;
   Timer? _wsReconnectTimer;
   WebSocket? _ws;
   bool _loading = true;
-  int _selectedIndex = 0;
 
   @override
   void initState() {
     super.initState();
+    _actual = _normalizeTracking(widget.ordenInicial);
     _cargar();
-    _timer = Timer.periodic(const Duration(seconds: 8), (_) => _tickUbicacion());
+    _timer =
+        Timer.periodic(const Duration(seconds: 8), (_) => _tickUbicacion());
   }
 
   @override
@@ -42,19 +48,23 @@ class _TrabajadorTrackingScreenState extends State<TrabajadorTrackingScreen> {
   }
 
   Future<void> _cargar() async {
+    final idOrden = _actual?['id_orden_recojo']?.toString();
+    if (idOrden == null || idOrden.isEmpty) {
+      if (!mounted) return;
+      setState(() => _loading = false);
+      return;
+    }
     try {
       await _trackingService.syncPendingOperations();
-      final rows = await _trackingService.obtenerMisOrdenes();
+      final row = await _trackingService.obtenerTrackingOrden(idOrden);
+      if (!mounted) return;
       setState(() {
-        _ordenes = rows;
-        if (_ordenes.isNotEmpty) {
-          _selectedIndex = 0;
-          _actual = _normalizeTracking(_ordenes[_selectedIndex] as Map<String, dynamic>);
-          _connectWs();
-        }
+        _actual = _normalizeTracking(row);
         _loading = false;
       });
+      _connectWsIfNeeded();
     } catch (_) {
+      if (!mounted) return;
       setState(() => _loading = false);
     }
   }
@@ -63,8 +73,9 @@ class _TrabajadorTrackingScreenState extends State<TrabajadorTrackingScreen> {
     if (_actual == null) return;
     final id = _actual!['id_orden_recojo'].toString();
     final r = await _trackingService.aceptarOrden(id);
+    if (!mounted) return;
     setState(() => _actual = _normalizeTracking(r));
-    _connectWs();
+    _connectWsIfNeeded();
   }
 
   Future<void> _marcarLlegadaAuxilio() async {
@@ -73,15 +84,16 @@ class _TrabajadorTrackingScreenState extends State<TrabajadorTrackingScreen> {
     final r = await _trackingService.marcarLlegadaAuxilio(id);
     if (!mounted) return;
     setState(() => _actual = _normalizeTracking(r));
-    _connectWs();
+    _connectWsIfNeeded();
   }
 
-  Future<void> _iniciarRetorno() async {
+  Future<void> _iniciarTrasladoTaller() async {
     if (_actual == null) return;
     final id = _actual!['id_orden_recojo'].toString();
-    final r = await _trackingService.iniciarRetorno(id);
+    final r = await _trackingService.iniciarTrasladoTaller(id);
     if (!mounted) return;
     setState(() => _actual = _normalizeTracking(r));
+    _connectWsIfNeeded();
   }
 
   Future<void> _marcarLlegadaTaller() async {
@@ -90,19 +102,33 @@ class _TrabajadorTrackingScreenState extends State<TrabajadorTrackingScreen> {
     final r = await _trackingService.marcarLlegadaTaller(id);
     if (!mounted) return;
     setState(() => _actual = _normalizeTracking(r));
+    await _ws?.close();
   }
 
-  void _seleccionarOrden(int index) {
-    if (index < 0 || index >= _ordenes.length) return;
-    setState(() {
-      _selectedIndex = index;
-      _actual = _normalizeTracking(_ordenes[index] as Map<String, dynamic>);
-    });
-    _connectWs();
+  bool _esOrdenActiva(String? estado) {
+    return estado == 'PENDIENTE_ACEPTACION' ||
+        estado == 'ACEPTADA' ||
+        estado == 'EN_CAMINO_RECOJO' ||
+        estado == 'LLEGADA_AUXILIO' ||
+        estado == 'EN_CAMINO_TALLER';
   }
 
-  Future<void> _connectWs() async {
-    if (_actual == null) return;
+  bool _permiteUbicacion(String? estado) {
+    return estado == 'PENDIENTE_ACEPTACION' ||
+        estado == 'ACEPTADA' ||
+        estado == 'EN_CAMINO_RECOJO' ||
+        estado == 'LLEGADA_AUXILIO' ||
+        estado == 'EN_CAMINO_TALLER';
+  }
+
+  Future<void> _connectWsIfNeeded() async {
+    final estado = _actual?['estado_orden']?.toString();
+    if (!_esOrdenActiva(estado) || _actual == null) {
+      await _ws?.close();
+      _ws = null;
+      return;
+    }
+
     await _ws?.close();
     final id = _actual!['id_orden_recojo'].toString();
     final wsUrl = TrackingService.baseUrl.contains('localhost')
@@ -122,23 +148,38 @@ class _TrabajadorTrackingScreenState extends State<TrabajadorTrackingScreen> {
         setState(() => _actual = _normalizeTracking(data));
       } catch (_) {}
     }, onDone: () {
+      if (!_esOrdenActiva(_actual?['estado_orden']?.toString())) {
+        return;
+      }
       _wsReconnectTimer?.cancel();
-      _wsReconnectTimer = Timer(const Duration(seconds: 3), _connectWs);
+      _wsReconnectTimer = Timer(const Duration(seconds: 3), _connectWsIfNeeded);
     }, onError: (_) {
+      if (!_esOrdenActiva(_actual?['estado_orden']?.toString())) {
+        return;
+      }
       _wsReconnectTimer?.cancel();
-      _wsReconnectTimer = Timer(const Duration(seconds: 3), _connectWs);
+      _wsReconnectTimer = Timer(const Duration(seconds: 3), _connectWsIfNeeded);
     });
   }
 
   Future<void> _tickUbicacion() async {
-    if (_actual == null) return;
+    final estado = _actual?['estado_orden']?.toString();
+    if (_actual == null || !_permiteUbicacion(estado)) {
+      return;
+    }
     final granted = await Geolocator.requestPermission();
-    if (granted == LocationPermission.denied || granted == LocationPermission.deniedForever) return;
+    if (granted == LocationPermission.denied ||
+        granted == LocationPermission.deniedForever) {
+      return;
+    }
     await _trackingService.syncPendingOperations();
     final pos = await Geolocator.getCurrentPosition();
     final id = _actual!['id_orden_recojo'].toString();
-    final r = await _trackingService.actualizarUbicacion(id, pos.latitude, pos.longitude);
-    if (!mounted) return;
+    final r = await _trackingService.actualizarUbicacion(
+        id, pos.latitude, pos.longitude);
+    if (!mounted) {
+      return;
+    }
     setState(() => _actual = _normalizeTracking(r));
   }
 
@@ -153,17 +194,25 @@ class _TrabajadorTrackingScreenState extends State<TrabajadorTrackingScreen> {
     final latTaller = (_actual?['latitud_taller'] as num?)?.toDouble();
     final lngTaller = (_actual?['longitud_taller'] as num?)?.toDouble();
     final rutaGeo = _actual?['ruta_geojson'] as Map<String, dynamic>?;
-    final rutaRecorridaGeo = _actual?['ruta_recorrida_geojson'] as Map<String, dynamic>?;
+    final rutaRecorridaGeo =
+        _actual?['ruta_recorrida_geojson'] as Map<String, dynamic>?;
     final ruta = _toPolyline(rutaGeo);
     final rutaRecorrida = _toPolyline(rutaRecorridaGeo);
-    final fechaAceptacion = DateTime.tryParse((_actual?['fecha_aceptacion'] ?? '').toString());
-    final fechaLlegadaAuxilio = DateTime.tryParse((_actual?['fecha_llegada_auxilio'] ?? '').toString());
-    final fechaInicioRegreso = DateTime.tryParse((_actual?['fecha_inicio_regreso'] ?? '').toString());
-    final fechaLlegadaTaller = DateTime.tryParse((_actual?['fecha_llegada_taller'] ?? '').toString());
-    final duracionTotal = (_actual?['duracion_total_segundos'] as num?)?.toDouble();
+    final fechaAceptacion =
+        DateTime.tryParse((_actual?['fecha_aceptacion'] ?? '').toString());
+    final fechaLlegadaAuxilio =
+        DateTime.tryParse((_actual?['fecha_llegada_auxilio'] ?? '').toString());
+    final fechaInicioRegreso =
+        DateTime.tryParse((_actual?['fecha_inicio_regreso'] ?? '').toString());
+    final fechaLlegadaTaller =
+        DateTime.tryParse((_actual?['fecha_llegada_taller'] ?? '').toString());
+    final duracionTotal =
+        (_actual?['duracion_total_segundos'] as num?)?.toDouble();
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Mis Asignaciones'),
+        title: Text(
+            _actual?['codigo_solicitud']?.toString() ?? 'Detalle de orden'),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
@@ -174,69 +223,66 @@ class _TrabajadorTrackingScreenState extends State<TrabajadorTrackingScreen> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _actual == null
-              ? const Center(child: Text('No tienes ordenes activas'))
+              ? const Center(child: Text('No se pudo cargar la orden'))
               : Padding(
                   padding: const EdgeInsets.all(16),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      if (_ordenes.length > 1)
-                        SizedBox(
-                          height: 46,
-                          child: ListView.builder(
-                            scrollDirection: Axis.horizontal,
-                            itemCount: _ordenes.length,
-                            itemBuilder: (context, index) {
-                              final active = index == _selectedIndex;
-                              return Padding(
-                                padding: const EdgeInsets.only(right: 8),
-                                child: ChoiceChip(
-                                  selected: active,
-                                  label: Text('Asignación ${index + 1}'),
-                                  onSelected: (_) => _seleccionarOrden(index),
-                                  avatar: Icon(
-                                    Icons.assignment,
-                                    size: 18,
-                                    color: active ? Colors.white : Colors.blueGrey,
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
-                        ),
-                      if (_ordenes.length > 1) const SizedBox(height: 8),
                       Text(
-                        'ID asignación: ${_actual!['id_asignacion']}',
-                        style: const TextStyle(fontSize: 12, color: Colors.grey),
+                        _actual!['cliente_nombre']?.toString().isNotEmpty ==
+                                true
+                            ? 'Cliente: ${_actual!['cliente_nombre']}'
+                            : 'ID asignación: ${_actual!['id_asignacion']}',
+                        style:
+                            const TextStyle(fontSize: 13, color: Colors.grey),
                         overflow: TextOverflow.ellipsis,
                       ),
-                      Text('Estado: ${_actual!['estado_orden']}', style: const TextStyle(fontWeight: FontWeight.bold)),
-                      Text('Distancia: ${((_actual!['distancia_metros'] ?? 0) as num).toStringAsFixed(0)} m'),
-                      Text('ETA: ${(((_actual!['duracion_segundos'] ?? 0) as num) / 60).toStringAsFixed(0)} min'),
+                      const SizedBox(height: 4),
+                      Text('Estado: ${_actual!['estado_orden']}',
+                          style: const TextStyle(fontWeight: FontWeight.bold)),
+                      Text(
+                          'Distancia: ${((_actual!['distancia_metros'] ?? 0) as num).toStringAsFixed(0)} m'),
+                      Text(
+                          'ETA: ${(((_actual!['duracion_segundos'] ?? 0) as num) / 60).toStringAsFixed(0)} min'),
                       if (fechaAceptacion != null)
                         Text(
-                          'Inicio: ${fechaAceptacion.toLocal()}${fechaLlegadaAuxilio != null ? ' | Auxilio: ${fechaLlegadaAuxilio.toLocal()}' : ''}${fechaInicioRegreso != null ? ' | Regreso: ${fechaInicioRegreso.toLocal()}' : ''}${fechaLlegadaTaller != null ? ' | Fin: ${fechaLlegadaTaller.toLocal()}' : ''}${duracionTotal != null ? ' | Total: ${(duracionTotal / 60).toStringAsFixed(0)} min' : ''}',
+                          'Inicio: ${fechaAceptacion.toLocal()}${fechaLlegadaAuxilio != null ? ' | Auxilio: ${fechaLlegadaAuxilio.toLocal()}' : ''}${fechaInicioRegreso != null ? ' | Traslado: ${fechaInicioRegreso.toLocal()}' : ''}${fechaLlegadaTaller != null ? ' | Taller: ${fechaLlegadaTaller.toLocal()}' : ''}${duracionTotal != null ? ' | Total: ${(duracionTotal / 60).toStringAsFixed(0)} min' : ''}',
                           style: const TextStyle(fontSize: 11),
                         ),
                       const SizedBox(height: 8),
                       if (_actual!['estado_orden'] == 'PENDIENTE_ACEPTACION')
-                        ElevatedButton(onPressed: _aceptar, child: const Text('Iniciar recorrido')),
-                      if (_actual!['estado_orden'] == 'ACEPTADA' || _actual!['estado_orden'] == 'EN_CAMINO_RECOJO')
-                        ElevatedButton(onPressed: _marcarLlegadaAuxilio, child: const Text('Marcar llegada al auxilio')),
+                        ElevatedButton(
+                            onPressed: _aceptar,
+                            child: const Text('Iniciar camino al auxilio')),
+                      if (_actual!['estado_orden'] == 'ACEPTADA' ||
+                          _actual!['estado_orden'] == 'EN_CAMINO_RECOJO')
+                        ElevatedButton(
+                            onPressed: _marcarLlegadaAuxilio,
+                            child: const Text('Marcar llegada al auxilio')),
                       if (_actual!['estado_orden'] == 'LLEGADA_AUXILIO')
-                        ElevatedButton(onPressed: _iniciarRetorno, child: const Text('Iniciar regreso')),
+                        ElevatedButton(
+                            onPressed: _iniciarTrasladoTaller,
+                            child: const Text('Iniciar traslado al taller')),
                       if (_actual!['estado_orden'] == 'EN_CAMINO_TALLER')
-                        ElevatedButton(onPressed: _marcarLlegadaTaller, child: const Text('Marcar llegada al taller')),
+                        ElevatedButton(
+                            onPressed: _marcarLlegadaTaller,
+                            child: const Text('Marcar llegada al taller')),
                       const SizedBox(height: 8),
                       Expanded(
                         child: (lat == null || lng == null)
-                            ? const Center(child: Text('Esperando ubicacion...'))
+                            ? const Center(
+                                child: Text('Esperando ubicación...'))
                             : FlutterMap(
-                                options: MapOptions(initialCenter: LatLng(lat, lng), initialZoom: 15),
+                                options: MapOptions(
+                                    initialCenter: LatLng(lat, lng),
+                                    initialZoom: 15),
                                 children: [
                                   TileLayer(
-                                    urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                                    userAgentPackageName: 'com.emergencias.vehicular/1.0.0',
+                                    urlTemplate:
+                                        'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                                    userAgentPackageName:
+                                        'com.emergencias.vehicular/1.0.0',
                                   ),
                                   MarkerLayer(
                                     markers: [
@@ -244,41 +290,57 @@ class _TrabajadorTrackingScreenState extends State<TrabajadorTrackingScreen> {
                                         point: LatLng(lat, lng),
                                         width: 42,
                                         height: 42,
-                                        child: const Icon(Icons.delivery_dining, color: Colors.red, size: 36),
+                                        child: const Icon(Icons.delivery_dining,
+                                            color: Colors.red, size: 36),
                                       ),
-                                      if (latSolicitud != null && lngSolicitud != null)
+                                      if (latSolicitud != null &&
+                                          lngSolicitud != null)
                                         Marker(
-                                          point: LatLng(latSolicitud, lngSolicitud),
+                                          point: LatLng(
+                                              latSolicitud, lngSolicitud),
                                           width: 42,
                                           height: 42,
-                                          child: const Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 34),
+                                          child: const Icon(
+                                              Icons.warning_amber_rounded,
+                                              color: Colors.orange,
+                                              size: 34),
                                         ),
-                                      if (latTaller != null && lngTaller != null)
+                                      if (latTaller != null &&
+                                          lngTaller != null)
                                         Marker(
                                           point: LatLng(latTaller, lngTaller),
                                           width: 42,
                                           height: 42,
-                                          child: const Icon(Icons.home_work, color: Colors.blue, size: 34),
+                                          child: const Icon(Icons.home_work,
+                                              color: Colors.blue, size: 34),
                                         ),
-                                      if (latDestino != null && lngDestino != null)
+                                      if (latDestino != null &&
+                                          lngDestino != null)
                                         Marker(
                                           point: LatLng(latDestino, lngDestino),
                                           width: 40,
                                           height: 40,
-                                          child: const Icon(Icons.place, color: Colors.green, size: 34),
+                                          child: const Icon(Icons.place,
+                                              color: Colors.green, size: 34),
                                         ),
                                     ],
                                   ),
                                   if (rutaRecorrida.isNotEmpty)
                                     PolylineLayer(
                                       polylines: [
-                                        Polyline(points: rutaRecorrida, strokeWidth: 4, color: Colors.grey),
+                                        Polyline(
+                                            points: rutaRecorrida,
+                                            strokeWidth: 4,
+                                            color: Colors.grey),
                                       ],
                                     ),
                                   if (ruta.isNotEmpty)
                                     PolylineLayer(
                                       polylines: [
-                                        Polyline(points: ruta, strokeWidth: 5, color: Colors.green),
+                                        Polyline(
+                                            points: ruta,
+                                            strokeWidth: 5,
+                                            color: Colors.green),
                                       ],
                                     ),
                                 ],

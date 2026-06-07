@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'dart:async';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_stripe/flutter_stripe.dart';
 import 'screens/login_screen.dart';
@@ -18,25 +19,7 @@ import 'services/notificacion_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
-  // 1. Inicializar Firebase
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
-  
-  // 2. Registrar background message handler (solo plataformas moviles)
-  await configurePushBackgroundHandler();
-
-  const stripePk = String.fromEnvironment('STRIPE_PUBLISHABLE_KEY', defaultValue: '');
-  // flutter_stripe en web puede invocar dart:io internamente en ciertos flujos.
-  // Evitamos inicialización global en web para no romper el arranque.
-  if (!kIsWeb && stripePk.isNotEmpty) {
-    Stripe.publishableKey = stripePk;
-    await Stripe.instance.applySettings();
-  }
-  
   debugPrint('[MAIN] Aplicación inicializada');
-  
   runApp(const MyApp());
 }
 
@@ -99,12 +82,29 @@ class _SessionValidatorState extends State<_SessionValidator> {
 
   Future<void> _validateAndInitPush() async {
     try {
+      if (Firebase.apps.isEmpty) {
+        await Firebase.initializeApp(
+          options: DefaultFirebaseOptions.currentPlatform,
+        );
+      }
+
+      await configurePushBackgroundHandler();
+
+      const stripePk = String.fromEnvironment('STRIPE_PUBLISHABLE_KEY', defaultValue: '');
+      if (!kIsWeb && stripePk.isNotEmpty) {
+        Stripe.publishableKey = stripePk;
+        await Stripe.instance.applySettings();
+      }
+
       final authService = AuthService();
       
       debugPrint('[SESSION] Validando sesión persistida...');
       
       // Revisar si hay token guardado
-      final token = await authService.getStoredToken();
+      final token = await authService.getStoredToken().timeout(
+        const Duration(seconds: 5),
+        onTimeout: () => null,
+      );
       
       if (token == null || token.isEmpty) {
         debugPrint('[SESSION] No hay sesión persistida');
@@ -114,7 +114,10 @@ class _SessionValidatorState extends State<_SessionValidator> {
       debugPrint('[SESSION] Token encontrado, validando...');
       
       // Validar que el token sea válido
-      final isValid = await authService.validateToken();
+      final isValid = await authService.validateToken().timeout(
+        const Duration(seconds: 8),
+        onTimeout: () => false,
+      );
       if (!isValid) {
         debugPrint('[SESSION] Token inválido, limpiando sesión');
         await authService.clearSession();

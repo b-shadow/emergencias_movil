@@ -10,10 +10,14 @@ class TrackingService {
   final OfflineSyncService _offlineSync = OfflineSyncService();
   static const String _cacheOrdenes = 'cache_mis_ordenes';
 
-  Future<List<dynamic>> obtenerMisOrdenes() async {
+  Future<List<dynamic>> obtenerMisOrdenes(
+      {bool incluirHistorial = false}) async {
     try {
       final headers = await _authService.getAuthHeaders();
-      final resp = await http.get(Uri.parse('$baseUrl/trabajadores/mis-ordenes'), headers: headers);
+      final uri = Uri.parse('$baseUrl/trabajadores/mis-ordenes').replace(
+          queryParameters:
+              incluirHistorial ? {'incluir_historial': 'true'} : null);
+      final resp = await http.get(uri, headers: headers);
       if (resp.statusCode == 200) {
         final data = jsonDecode(resp.body) as List<dynamic>;
         await _offlineSync.cacheJson(_cacheOrdenes, data);
@@ -22,7 +26,9 @@ class TrackingService {
       throw Exception('Error al obtener ordenes: ${resp.statusCode}');
     } catch (_) {
       final cached = await _offlineSync.getCachedJson(_cacheOrdenes);
-      if (cached is List) return cached;
+      if (cached is List) {
+        return cached;
+      }
       rethrow;
     }
   }
@@ -33,21 +39,40 @@ class TrackingService {
       Uri.parse('$baseUrl/trabajadores/ordenes-recojo/$idOrden/accept'),
       headers: headers,
     );
-    if (resp.statusCode == 200) return jsonDecode(resp.body) as Map<String, dynamic>;
+    if (resp.statusCode == 200) {
+      return jsonDecode(resp.body) as Map<String, dynamic>;
+    }
     throw Exception('Error al aceptar orden: ${resp.statusCode}');
   }
 
   Future<Map<String, dynamic>> marcarLlegadaAuxilio(String idOrden) async {
     final headers = await _authService.getAuthHeaders();
     final resp = await http.post(
-      Uri.parse('$baseUrl/trabajadores/ordenes-recojo/$idOrden/llegada-auxilio'),
+      Uri.parse(
+          '$baseUrl/trabajadores/ordenes-recojo/$idOrden/llegada-auxilio'),
       headers: headers,
     );
-    if (resp.statusCode == 200) return jsonDecode(resp.body) as Map<String, dynamic>;
+    if (resp.statusCode == 200) {
+      return jsonDecode(resp.body) as Map<String, dynamic>;
+    }
     throw Exception('Error al marcar llegada al auxilio: ${resp.statusCode}');
   }
 
-  Future<Map<String, dynamic>> actualizarUbicacion(String idOrden, double lat, double lng) async {
+  Future<Map<String, dynamic>> obtenerTrackingOrden(String idOrden) async {
+    final headers = await _authService.getAuthHeaders();
+    final resp = await http.get(
+      Uri.parse('$baseUrl/trabajadores/ordenes-recojo/$idOrden/tracking'),
+      headers: headers,
+    );
+    if (resp.statusCode == 200) {
+      return jsonDecode(resp.body) as Map<String, dynamic>;
+    }
+    throw Exception(
+        'Error al obtener tracking de la orden: ${resp.statusCode}');
+  }
+
+  Future<Map<String, dynamic>> actualizarUbicacion(
+      String idOrden, double lat, double lng) async {
     final payload = {'latitud': lat, 'longitud': lng, 'profile': 'foot'};
     try {
       final headers = await _authService.getAuthHeaders();
@@ -56,7 +81,9 @@ class TrackingService {
         headers: headers,
         body: jsonEncode(payload),
       );
-      if (resp.statusCode == 200) return jsonDecode(resp.body) as Map<String, dynamic>;
+      if (resp.statusCode == 200) {
+        return jsonDecode(resp.body) as Map<String, dynamic>;
+      }
       throw Exception('Error al actualizar ubicacion: ${resp.statusCode}');
     } catch (_) {
       await _offlineSync.enqueueOperation({
@@ -73,14 +100,17 @@ class TrackingService {
     }
   }
 
-  Future<Map<String, dynamic>> iniciarRetorno(String idOrden) async {
+  Future<Map<String, dynamic>> iniciarTrasladoTaller(String idOrden) async {
     final headers = await _authService.getAuthHeaders();
     final resp = await http.post(
-      Uri.parse('$baseUrl/trabajadores/ordenes-recojo/$idOrden/iniciar-retorno'),
+      Uri.parse(
+          '$baseUrl/trabajadores/ordenes-recojo/$idOrden/iniciar-retorno'),
       headers: headers,
     );
-    if (resp.statusCode == 200) return jsonDecode(resp.body) as Map<String, dynamic>;
-    throw Exception('Error al iniciar retorno: ${resp.statusCode}');
+    if (resp.statusCode == 200) {
+      return jsonDecode(resp.body) as Map<String, dynamic>;
+    }
+    throw Exception('Error al iniciar traslado al taller: ${resp.statusCode}');
   }
 
   Future<Map<String, dynamic>> marcarLlegadaTaller(String idOrden) async {
@@ -89,7 +119,9 @@ class TrackingService {
       Uri.parse('$baseUrl/trabajadores/ordenes-recojo/$idOrden/llegada-taller'),
       headers: headers,
     );
-    if (resp.statusCode == 200) return jsonDecode(resp.body) as Map<String, dynamic>;
+    if (resp.statusCode == 200) {
+      return jsonDecode(resp.body) as Map<String, dynamic>;
+    }
     throw Exception('Error al marcar llegada al taller: ${resp.statusCode}');
   }
 
@@ -107,8 +139,11 @@ class TrackingService {
       }
       throw Exception('Tracking no disponible');
     } catch (_) {
-      final cached = await _offlineSync.getCachedJson('tracking_solicitud_$idSolicitud');
-      if (cached is Map) return Map<String, dynamic>.from(cached);
+      final cached =
+          await _offlineSync.getCachedJson('tracking_solicitud_$idSolicitud');
+      if (cached is Map) {
+        return Map<String, dynamic>.from(cached);
+      }
       rethrow;
     }
   }
@@ -124,7 +159,8 @@ class TrackingService {
           final idOrden = op['id_orden'] as String;
           final payload = Map<String, dynamic>.from(op['payload'] as Map);
           final resp = await http.post(
-            Uri.parse('$baseUrl/trabajadores/ordenes-recojo/$idOrden/ubicacion'),
+            Uri.parse(
+                '$baseUrl/trabajadores/ordenes-recojo/$idOrden/ubicacion'),
             headers: headers,
             body: jsonEncode(payload),
           );

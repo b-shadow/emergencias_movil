@@ -88,6 +88,8 @@ class _PagosSolicitudScreenState extends State<PagosSolicitudScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final moneda = ((_resumen?['moneda'] ?? 'BOB').toString()).toUpperCase();
+    final simboloMoneda = moneda == 'BOB' ? 'Bs' : moneda;
     final total = ((_resumen?['total_exigible'] ?? 0) as num).toDouble();
     final pagado = ((_resumen?['total_pagado'] ?? 0) as num).toDouble();
     final saldo = ((_resumen?['saldo_pendiente'] ?? 0) as num).toDouble();
@@ -110,9 +112,9 @@ class _PagosSolicitudScreenState extends State<PagosSolicitudScreen> {
                         children: [
                           Text('Estado de pago: $estadoPago', style: const TextStyle(fontWeight: FontWeight.w700)),
                           const SizedBox(height: 8),
-                          Text('Total exigible: USD ${total.toStringAsFixed(2)}'),
-                          Text('Total pagado: USD ${pagado.toStringAsFixed(2)}'),
-                          Text('Saldo pendiente: USD ${saldo.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.w700)),
+                          Text('Total exigible: $simboloMoneda ${total.toStringAsFixed(2)}'),
+                          Text('Total pagado: $simboloMoneda ${pagado.toStringAsFixed(2)}'),
+                          Text('Saldo pendiente: $simboloMoneda ${saldo.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.w700)),
                         ],
                       ),
                     ),
@@ -121,8 +123,8 @@ class _PagosSolicitudScreenState extends State<PagosSolicitudScreen> {
                   TextField(
                     controller: _montoCtrl,
                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    decoration: const InputDecoration(
-                      labelText: 'Monto a pagar (USD)',
+                    decoration: InputDecoration(
+                      labelText: 'Monto a pagar ($simboloMoneda)',
                       border: OutlineInputBorder(),
                     ),
                   ),

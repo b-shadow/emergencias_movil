@@ -9,6 +9,7 @@ import '../models/postulacion.dart';
 import '../services/solicitud_service.dart';
 import '../services/postulacion_service.dart';
 import '../services/tracking_service.dart';
+import '../services/calificacion_service.dart';
 import 'editar_solicitud_screen.dart';
 import 'pagos_solicitud_screen.dart';
 import '../widgets/theme_toggle_button.dart';
@@ -31,6 +32,7 @@ class _DetalleSolicitudScreenState extends State<DetalleSolicitudScreen> {
   final SolicitudService _solicitudService = SolicitudService();
   final PostulacionService _postulacionService = PostulacionService();
   final TrackingService _trackingService = TrackingService();
+  final CalificacionService _calificacionService = CalificacionService();
   bool _isLoading = false;
   late Solicitud _solicitudActual;
   List<Postulacion> _postulaciones = [];
@@ -41,6 +43,9 @@ class _DetalleSolicitudScreenState extends State<DetalleSolicitudScreen> {
   Timer? _wsPingTimer;
   Timer? _wsReconnectTimer;
   WebSocket? _trackingWs;
+  bool _calificacionModalMostrado = false;
+  int _estrellasCalificacion = 5;
+  final TextEditingController _comentarioCalificacionController = TextEditingController();
 
   @override
   void initState() {
@@ -58,6 +63,7 @@ class _DetalleSolicitudScreenState extends State<DetalleSolicitudScreen> {
     _wsPingTimer?.cancel();
     _wsReconnectTimer?.cancel();
     _trackingWs?.close();
+    _comentarioCalificacionController.dispose();
     super.dispose();
   }
 
@@ -79,6 +85,7 @@ class _DetalleSolicitudScreenState extends State<DetalleSolicitudScreen> {
           final data = jsonDecode(event as String) as Map<String, dynamic>;
           if (!mounted) return;
           setState(() => _tracking = _normalizeTrackingPayload(data));
+          _maybePedirCalificacion();
         } catch (_) {}
       }, onDone: () {
         _wsReconnectTimer?.cancel();
@@ -95,7 +102,102 @@ class _DetalleSolicitudScreenState extends State<DetalleSolicitudScreen> {
       final t = await _trackingService.trackingPorSolicitud(_solicitudActual.idSolicitud);
       if (!mounted) return;
       setState(() => _tracking = _normalizeTrackingPayload(t));
+      _maybePedirCalificacion();
     } catch (_) {}
+  }
+
+  Future<void> _maybePedirCalificacion() async {
+    if (!mounted || _calificacionModalMostrado || _tracking == null) return;
+    final estado = (_tracking!['estado_orden'] ?? '').toString();
+    final idAsignacion = (_tracking!['id_asignacion'] ?? '').toString();
+    if (estado != 'FINALIZADA' && estado != 'ATENDIDA') return;
+    if (idAsignacion.isEmpty) return;
+
+    try {
+      final existente = await _calificacionService.obtenerCalificacion(idAsignacion);
+      if (!mounted || existente != null) return;
+      _calificacionModalMostrado = true;
+      await _mostrarModalCalificacion(idAsignacion);
+    } catch (_) {}
+  }
+
+  Future<void> _mostrarModalCalificacion(String idAsignacion) async {
+    _estrellasCalificacion = 5;
+    _comentarioCalificacionController.clear();
+    if (!mounted) return;
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setStateModal) {
+            return AlertDialog(
+              title: const Text('Calificar atención'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('¿Cómo quedó tu vehículo?'),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: List.generate(5, (index) {
+                      final selected = index < _estrellasCalificacion;
+                      return IconButton(
+                        onPressed: () => setStateModal(() => _estrellasCalificacion = index + 1),
+                        icon: Icon(
+                          selected ? Icons.star : Icons.star_border,
+                          color: Colors.amber,
+                        ),
+                      );
+                    }),
+                  ),
+                  TextField(
+                    controller: _comentarioCalificacionController,
+                    maxLines: 3,
+                    decoration: const InputDecoration(
+                      labelText: 'Comentario',
+                      hintText: 'Cuéntanos cómo fue la atención',
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cerrar'),
+                ),
+                ElevatedButton(
+                  onPressed: () async {
+                    final navigator = Navigator.of(context);
+                    final messenger = ScaffoldMessenger.of(context);
+                    try {
+                      await _calificacionService.calificarAtencion(
+                        idAsignacion,
+                        estrellas: _estrellasCalificacion,
+                        comentario: _comentarioCalificacionController.text.trim().isEmpty
+                            ? null
+                            : _comentarioCalificacionController.text.trim(),
+                      );
+                      if (!mounted) return;
+                      navigator.pop();
+                      messenger.showSnackBar(
+                        const SnackBar(content: Text('Calificación registrada')),
+                      );
+                    } catch (e) {
+                      if (!mounted) return;
+                      messenger.showSnackBar(
+                        SnackBar(content: Text('Error: $e')),
+                      );
+                    }
+                  },
+                  child: const Text('Enviar'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
   }
 
   Future<void> _cancelarSolicitud() async {
@@ -162,6 +264,7 @@ class _DetalleSolicitudScreenState extends State<DetalleSolicitudScreen> {
       setState(() => _solicitudActual = solicitud);
       await _cargarPostulaciones();
       widget.onActualizar();
+      _maybePedirCalificacion();
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

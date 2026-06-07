@@ -7,7 +7,7 @@ import '../services/auth_service.dart';
 import '../services/tenant_service.dart';
 import 'login_screen.dart';
 import '../widgets/theme_toggle_button.dart';
-import 'trabajador_tracking_screen.dart';
+import 'trabajador_ordenes_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -42,7 +42,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
         final tenant = await _tenantService.obtenerTenantTrabajador();
         if (!mounted) return;
         setState(() {
-          tenantLabel = (tenant['slug_tenant'] ?? tenant['nombre_tenant'] ?? '').toString();
+          tenantLabel = (tenant['slug_tenant'] ?? tenant['nombre_tenant'] ?? '')
+              .toString();
         });
       } catch (_) {}
     }
@@ -67,8 +68,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 await _authService.logout();
                 if (!rootContext.mounted) return;
                 Navigator.of(rootContext).pushAndRemoveUntil(
-                  MaterialPageRoute(
-                      builder: (_) => const LoginScreen()),
+                  MaterialPageRoute(builder: (_) => const LoginScreen()),
                   (route) => false,
                 );
               },
@@ -216,78 +216,81 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       onTap: () {
                         Navigator.of(context).push(
                           MaterialPageRoute(
-                            builder: (context) => const TrabajadorTrackingScreen(),
+                            builder: (context) =>
+                                const TrabajadorOrdenesScreen(),
                           ),
                         );
                       },
                     ),
                   const SizedBox(height: 16),
-                  if (userRole == 'CLIENTE') GridView.count(
-                    physics: const NeverScrollableScrollPhysics(),
-                    crossAxisCount: 2,
-                    shrinkWrap: true,
-                    crossAxisSpacing: 12,
-                    mainAxisSpacing: 12,
-                    childAspectRatio: 0.82,
-                    children: [
-                      _buildFeatureCard(
-                        color: const Color(0xFF7C3AED),
-                        title: 'Editar Mi Perfil',
-                        subtitle: 'Actualizar información personal',
-                        icon: Icons.person_outline,
-                        onTap: () async {
-                          final result = await Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => const EditarPerfilScreen(),
-                            ),
-                          );
-                          if (result == true) _loadUserName();
-                        },
-                      ),
-                      _buildFeatureCard(
-                        color: const Color(0xFF2563EB),
-                        title: 'Gestionar Vehículos',
-                        subtitle: 'Ver, editar y agregar vehículos',
-                        icon: Icons.directions_car_outlined,
-                        onTap: () {
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (context) => const VehiculosScreen(),
-                            ),
-                          );
-                        },
-                      ),
-                      _buildFeatureCard(
-                        color: const Color(0xFFF59E0B),
-                        title: 'Notificaciones',
-                        subtitle: 'Ver mis notificaciones',
-                        icon: Icons.notifications_none,
-                        onTap: () {
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (context) =>
-                                  const NotificacionesScreen(),
-                            ),
-                          );
-                        },
-                      ),
-                      _buildFeatureCard(
-                        color: const Color(0xFF22C55E),
-                        title: 'Historial de Solicitudes',
-                        subtitle: 'Ver solicitudes anteriores',
-                        icon: Icons.history,
-                        onTap: () {
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (context) =>
-                                  const MisSolicitudesScreen(),
-                            ),
-                          );
-                        },
-                      ),
-                    ],
-                  ),
+                  if (userRole == 'CLIENTE')
+                    GridView.count(
+                      physics: const NeverScrollableScrollPhysics(),
+                      crossAxisCount: 2,
+                      shrinkWrap: true,
+                      crossAxisSpacing: 12,
+                      mainAxisSpacing: 12,
+                      childAspectRatio: 0.82,
+                      children: [
+                        _buildFeatureCard(
+                          color: const Color(0xFF7C3AED),
+                          title: 'Editar Mi Perfil',
+                          subtitle: 'Actualizar información personal',
+                          icon: Icons.person_outline,
+                          onTap: () async {
+                            final result = await Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) =>
+                                    const EditarPerfilScreen(),
+                              ),
+                            );
+                            if (result == true) _loadUserName();
+                          },
+                        ),
+                        _buildFeatureCard(
+                          color: const Color(0xFF2563EB),
+                          title: 'Gestionar Vehículos',
+                          subtitle: 'Ver, editar y agregar vehículos',
+                          icon: Icons.directions_car_outlined,
+                          onTap: () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (context) => const VehiculosScreen(),
+                              ),
+                            );
+                          },
+                        ),
+                        _buildFeatureCard(
+                          color: const Color(0xFFF59E0B),
+                          title: 'Notificaciones',
+                          subtitle: 'Ver mis notificaciones',
+                          icon: Icons.notifications_none,
+                          onTap: () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (context) =>
+                                    const NotificacionesScreen(),
+                              ),
+                            );
+                          },
+                        ),
+                        _buildFeatureCard(
+                          color: const Color(0xFF22C55E),
+                          title: 'Historial de Solicitudes',
+                          subtitle: 'Ver solicitudes anteriores',
+                          icon: Icons.history,
+                          onTap: () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (context) =>
+                                    const MisSolicitudesScreen(),
+                              ),
+                            );
+                          },
+                        ),
+                      ],
+                    ),
                 ],
               ),
             ),
@@ -421,8 +424,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                   fontSize: 14,
-                  color:
-                      Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.65),
+                  color: Theme.of(context)
+                      .colorScheme
+                      .onSurface
+                      .withValues(alpha: 0.65),
                 ),
               ),
             ),
@@ -445,4 +450,3 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 }
-
