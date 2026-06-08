@@ -1,13 +1,35 @@
+import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
+
 import 'package:http/http.dart' as http;
+
 import '../models/postulacion.dart';
 import 'auth_service.dart';
+import 'offline_sync_service.dart';
 
 class PostulacionService {
   static String get baseUrl => AuthService.baseUrl;
   final AuthService _authService = AuthService();
+  final OfflineSyncService _offlineSync = OfflineSyncService();
 
-  Future<List<Postulacion>> obtenerPostulacionesSolicitud(String idSolicitud) async {
+  static const String _cachePostulacionesSolicitudPrefix =
+      'cache_postulaciones_solicitud_';
+  static const String _cacheMisPostulaciones = 'cache_mis_postulaciones';
+  static const String _cacheCotizacionPrefix = 'cache_cotizacion_postulacion_';
+
+  bool _isConnectivityError(Object error) {
+    final text = error.toString();
+    return error is TimeoutException ||
+        error is SocketException ||
+        error is http.ClientException ||
+        text.contains('SocketException') ||
+        text.contains('Failed host lookup') ||
+        text.contains('timed out');
+  }
+
+  Future<List<Postulacion>> obtenerPostulacionesSolicitud(
+      String idSolicitud) async {
     try {
       final headers = await _authService.getAuthHeaders();
 
@@ -18,7 +40,13 @@ class PostulacionService {
 
       if (response.statusCode == 200) {
         final List<dynamic> data = jsonDecode(response.body);
-        return data.map((item) => Postulacion.fromJson(item as Map<String, dynamic>)).toList();
+        await _offlineSync.cacheJson(
+          '$_cachePostulacionesSolicitudPrefix$idSolicitud',
+          data,
+        );
+        return data
+            .map((item) => Postulacion.fromJson(item as Map<String, dynamic>))
+            .toList();
       } else if (response.statusCode == 401) {
         throw Exception('Sesion expirada. Inicia sesion nuevamente.');
       } else if (response.statusCode == 404) {
@@ -27,6 +55,17 @@ class PostulacionService {
         throw Exception('Error al obtener postulaciones: ${response.statusCode}');
       }
     } catch (e) {
+      final cached = await _offlineSync
+          .getCachedJson('$_cachePostulacionesSolicitudPrefix$idSolicitud');
+      if (cached is List) {
+        return cached
+            .map((item) =>
+                Postulacion.fromJson(Map<String, dynamic>.from(item as Map)))
+            .toList();
+      }
+      if (_isConnectivityError(e)) {
+        throw Exception('OFFLINE_NO_CACHE_POSTULACIONES');
+      }
       throw Exception('Error: $e');
     }
   }
@@ -42,7 +81,10 @@ class PostulacionService {
 
       if (response.statusCode == 200) {
         final List<dynamic> data = jsonDecode(response.body);
-        return data.map((item) => Postulacion.fromJson(item as Map<String, dynamic>)).toList();
+        await _offlineSync.cacheJson(_cacheMisPostulaciones, data);
+        return data
+            .map((item) => Postulacion.fromJson(item as Map<String, dynamic>))
+            .toList();
       } else if (response.statusCode == 401) {
         throw Exception('Sesion expirada. Inicia sesion nuevamente.');
       } else if (response.statusCode == 404) {
@@ -51,6 +93,16 @@ class PostulacionService {
         throw Exception('Error al obtener postulaciones: ${response.statusCode}');
       }
     } catch (e) {
+      final cached = await _offlineSync.getCachedJson(_cacheMisPostulaciones);
+      if (cached is List) {
+        return cached
+            .map((item) =>
+                Postulacion.fromJson(Map<String, dynamic>.from(item as Map)))
+            .toList();
+      }
+      if (_isConnectivityError(e)) {
+        throw Exception('OFFLINE_NO_CACHE_MIS_POSTULACIONES');
+      }
       throw Exception('Error: $e');
     }
   }
@@ -79,7 +131,8 @@ class PostulacionService {
     }
   }
 
-  Future<Map<String, dynamic>> aceptarPostulacion(String idPostulacion, {String? idTrabajador}) async {
+  Future<Map<String, dynamic>> aceptarPostulacion(String idPostulacion,
+      {String? idTrabajador}) async {
     try {
       final headers = await _authService.getAuthHeaders();
 
@@ -147,15 +200,26 @@ class PostulacionService {
       ).timeout(const Duration(seconds: 15));
 
       if (response.statusCode == 200) {
-        return jsonDecode(response.body) as Map<String, dynamic>;
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        await _offlineSync.cacheJson('$_cacheCotizacionPrefix$idPostulacion', data);
+        return data;
       }
       throw Exception('Error al obtener cotizacion: ${response.statusCode}');
     } catch (e) {
+      final cached =
+          await _offlineSync.getCachedJson('$_cacheCotizacionPrefix$idPostulacion');
+      if (cached is Map) {
+        return Map<String, dynamic>.from(cached);
+      }
+      if (_isConnectivityError(e)) {
+        throw Exception('OFFLINE_NO_CACHE_COTIZACION');
+      }
       throw Exception('Error: $e');
     }
   }
 
-  Future<Map<String, dynamic>> decidirCotizacion(String idPostulacion, bool aceptar) async {
+  Future<Map<String, dynamic>> decidirCotizacion(
+      String idPostulacion, bool aceptar) async {
     try {
       final headers = await _authService.getAuthHeaders();
       final response = await http.post(

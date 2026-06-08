@@ -1,4 +1,6 @@
 import 'dart:convert';
+import 'dart:async';
+import 'dart:io';
 import 'package:http/http.dart' as http;
 import '../models/notificacion.dart';
 import 'auth_service.dart';
@@ -11,6 +13,12 @@ class NotificacionService {
   static const String _cacheNotificaciones = 'cache_notificaciones_mias';
   static const String _opTypeMarkRead = 'notificacion_marcar_leida';
   static const String _opTypeMarkAllRead = 'notificacion_marcar_todas';
+
+  bool _shouldQueueOffline(Object error) {
+    return error is TimeoutException ||
+        error is SocketException ||
+        error is http.ClientException;
+  }
 
   // Obtener mis notificaciones
   Future<NotificacionResponse> obtenerMisNotificaciones({
@@ -97,6 +105,7 @@ class NotificacionService {
         throw Exception('Error al marcar notificación: ${response.statusCode}');
       }
     } catch (e) {
+      if (!_shouldQueueOffline(e)) rethrow;
       await _offlineSync.enqueueOperation({
         'type': _opTypeMarkRead,
         'id_notificacion': idNotificacion,
@@ -126,6 +135,7 @@ class NotificacionService {
         throw Exception('Error al marcar notificaciones: ${response.statusCode}');
       }
     } catch (e) {
+      if (!_shouldQueueOffline(e)) rethrow;
       await _offlineSync.enqueueOperation({
         'type': _opTypeMarkAllRead,
       });

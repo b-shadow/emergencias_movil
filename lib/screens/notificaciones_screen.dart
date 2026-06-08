@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../models/notificacion.dart';
 import '../services/notificacion_service.dart';
 import '../services/auth_service.dart';
+import '../services/offline_status_service.dart';
 import 'login_screen.dart';
 import '../widgets/theme_toggle_button.dart';
 
@@ -47,11 +48,20 @@ class _NotificacionesScreenState extends State<NotificacionesScreen> {
 
   Future<void> _marcarComoLeida(String idNotificacion) async {
     try {
-      await _notificacionService.marcarComoLeida(idNotificacion);
+      final result = await _notificacionService.marcarComoLeida(idNotificacion);
+      await OfflineStatusService.instance.notifyPendingChanged(
+        (result['message'] ?? '').toString(),
+      );
       _cargarNotificaciones();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Marcada como leída')),
+          SnackBar(
+            content: Text(
+              result['queued_offline'] == true
+                  ? (result['message'] ?? 'Marcado pendiente de sincronización').toString()
+                  : 'Marcada como leída',
+            ),
+          ),
         );
       }
     } catch (e) {

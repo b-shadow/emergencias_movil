@@ -6,6 +6,7 @@ import 'notificaciones_screen.dart';
 import '../services/auth_service.dart';
 import '../services/tenant_service.dart';
 import 'login_screen.dart';
+import '../widgets/offline_sync_button.dart';
 import '../widgets/theme_toggle_button.dart';
 import 'trabajador_ordenes_screen.dart';
 
@@ -141,6 +142,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           ),
                           child: const ThemeToggleButton(),
                         ),
+                        const SizedBox(width: 10),
+                        const OfflineSyncButton(),
                         const SizedBox(width: 10),
                         ElevatedButton.icon(
                           onPressed: _logout,

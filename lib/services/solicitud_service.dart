@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:http/http.dart' as http;
 
@@ -14,8 +16,23 @@ class SolicitudService {
 
   static const String _cacheSolicitudes = 'cache_solicitudes';
   static const String _cacheSolicitudPrefix = 'cache_solicitud_';
+  static const String _cacheHistorialPrefix = 'cache_solicitud_historial_';
   static const String _opTypeCancel = 'solicitud_cancel';
   static const String _opTypeUpdate = 'solicitud_update';
+
+  bool _shouldQueueOffline(Object error) {
+    return error is TimeoutException ||
+        error is SocketException ||
+        error is http.ClientException;
+  }
+
+  bool _isConnectivityError(Object error) {
+    final text = error.toString();
+    return _shouldQueueOffline(error) ||
+        text.contains('SocketException') ||
+        text.contains('Failed host lookup') ||
+        text.contains('timed out');
+  }
 
   Future<List<Solicitud>> obtenerSolicitudes() async {
     try {
@@ -28,7 +45,9 @@ class SolicitudService {
       if (response.statusCode == 200) {
         final List<dynamic> data = jsonDecode(response.body);
         await _offlineSync.cacheJson(_cacheSolicitudes, data);
-        return data.map((item) => Solicitud.fromJson(item as Map<String, dynamic>)).toList();
+        return data
+            .map((item) => Solicitud.fromJson(item as Map<String, dynamic>))
+            .toList();
       }
       if (response.statusCode == 401) {
         throw Exception('Sesión expirada. Inicia sesión nuevamente.');
@@ -40,7 +59,13 @@ class SolicitudService {
     } catch (e) {
       final cached = await _offlineSync.getCachedJson(_cacheSolicitudes);
       if (cached is List) {
-        return cached.map((item) => Solicitud.fromJson(Map<String, dynamic>.from(item as Map))).toList();
+        return cached
+            .map((item) =>
+                Solicitud.fromJson(Map<String, dynamic>.from(item as Map)))
+            .toList();
+      }
+      if (_isConnectivityError(e)) {
+        throw Exception('OFFLINE_NO_CACHE_SOLICITUDES');
       }
       throw Exception('Error: $e');
     }
@@ -67,9 +92,13 @@ class SolicitudService {
       }
       throw Exception('Error al obtener solicitud: ${response.statusCode}');
     } catch (e) {
-      final cached = await _offlineSync.getCachedJson('$_cacheSolicitudPrefix$idSolicitud');
+      final cached =
+          await _offlineSync.getCachedJson('$_cacheSolicitudPrefix$idSolicitud');
       if (cached is Map) {
         return Solicitud.fromJson(Map<String, dynamic>.from(cached));
+      }
+      if (_isConnectivityError(e)) {
+        throw Exception('OFFLINE_NO_CACHE_DETALLE_SOLICITUD');
       }
       throw Exception('Error: $e');
     }
@@ -102,6 +131,7 @@ class SolicitudService {
       }
       throw Exception('Error al cancelar solicitud: ${response.statusCode}');
     } catch (e) {
+      if (!_shouldQueueOffline(e)) rethrow;
       await _offlineSync.enqueueOperation({
         'type': _opTypeCancel,
         'id_solicitud': idSolicitud,
@@ -109,7 +139,8 @@ class SolicitudService {
       });
       return {
         'queued_offline': true,
-        'message': 'Operación encolada para sincronización cuando vuelva internet',
+        'message':
+            'Operación encolada para sincronización cuando vuelva internet',
       };
     }
   }
@@ -151,6 +182,7 @@ class SolicitudService {
       }
       throw Exception('Error: ${response.statusCode}');
     } catch (e) {
+      if (!_shouldQueueOffline(e)) rethrow;
       await _offlineSync.enqueueOperation({
         'type': _opTypeUpdate,
         'id_solicitud': idSolicitud,
@@ -158,12 +190,14 @@ class SolicitudService {
       });
       return {
         'queued_offline': true,
-        'message': 'Actualización encolada para sincronización cuando vuelva internet',
+        'message':
+            'Actualización encolada para sincronización cuando vuelva internet',
       };
     }
   }
 
-  Future<List<Map<String, dynamic>>> obtenerHistorialEstados(String idSolicitud) async {
+  Future<List<Map<String, dynamic>>> obtenerHistorialEstados(
+      String idSolicitud) async {
     try {
       final headers = await _authService.getAuthHeaders();
       final response = await http.get(
@@ -173,6 +207,7 @@ class SolicitudService {
 
       if (response.statusCode == 200) {
         final List<dynamic> data = jsonDecode(response.body);
+        await _offlineSync.cacheJson('$_cacheHistorialPrefix$idSolicitud', data);
         return List<Map<String, dynamic>>.from(data);
       }
       if (response.statusCode == 401) {
@@ -180,6 +215,16 @@ class SolicitudService {
       }
       throw Exception('Error al obtener historial: ${response.statusCode}');
     } catch (e) {
+      final cached =
+          await _offlineSync.getCachedJson('$_cacheHistorialPrefix$idSolicitud');
+      if (cached is List) {
+        return cached
+            .map((item) => Map<String, dynamic>.from(item as Map))
+            .toList();
+      }
+      if (_isConnectivityError(e)) {
+        throw Exception('OFFLINE_NO_CACHE_HISTORIAL_SOLICITUD');
+      }
       throw Exception('Error: $e');
     }
   }
@@ -197,22 +242,26 @@ class SolicitudService {
         if (type == _opTypeCancel) {
           final idSolicitud = (op['id_solicitud'] ?? '').toString();
           if (idSolicitud.isEmpty) continue;
-          await http.post(
-            Uri.parse('$baseUrl/solicitudes_emergencia/$idSolicitud/cancel'),
-            headers: headers,
-            body: jsonEncode(op['payload'] ?? {}),
-          ).timeout(const Duration(seconds: 10));
+          await http
+              .post(
+                Uri.parse('$baseUrl/solicitudes_emergencia/$idSolicitud/cancel'),
+                headers: headers,
+                body: jsonEncode(op['payload'] ?? {}),
+              )
+              .timeout(const Duration(seconds: 10));
           continue;
         }
 
         if (type == _opTypeUpdate) {
           final idSolicitud = (op['id_solicitud'] ?? '').toString();
           if (idSolicitud.isEmpty) continue;
-          await http.put(
-            Uri.parse('$baseUrl/solicitudes_emergencia/$idSolicitud'),
-            headers: headers,
-            body: jsonEncode(op['payload'] ?? {}),
-          ).timeout(const Duration(seconds: 10));
+          await http
+              .put(
+                Uri.parse('$baseUrl/solicitudes_emergencia/$idSolicitud'),
+                headers: headers,
+                body: jsonEncode(op['payload'] ?? {}),
+              )
+              .timeout(const Duration(seconds: 10));
           continue;
         }
 

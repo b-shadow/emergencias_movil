@@ -15,6 +15,7 @@ class _MisSolicitudesScreenState extends State<MisSolicitudesScreen> {
   final SolicitudService _solicitudService = SolicitudService();
   List<Solicitud> _solicitudes = [];
   bool _isLoading = true;
+  String? _error;
   String _ordenamiento = 'reciente'; // 'reciente' o 'antiguo'
 
   @override
@@ -27,6 +28,7 @@ class _MisSolicitudesScreenState extends State<MisSolicitudesScreen> {
     try {
       setState(() {
         _isLoading = true;
+        _error = null;
       });
       final solicitudes = await _solicitudService.obtenerSolicitudes();
       if (!mounted) return;
@@ -39,10 +41,20 @@ class _MisSolicitudesScreenState extends State<MisSolicitudesScreen> {
       if (!mounted) return;
       setState(() {
         _isLoading = false;
+        final error = e.toString();
+        if (error.contains('OFFLINE_NO_CACHE_SOLICITUDES')) {
+          _error =
+              'No hay solicitudes disponibles sin conexión todavía. Abre esta pantalla una vez con internet para guardarlas localmente.';
+        } else {
+          _error = 'Error al cargar solicitudes: $e';
+        }
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error al cargar solicitudes: $e')),
-      );
+      if (_error != null &&
+          !_error!.contains('sin conexión todavía')) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(_error!)),
+        );
+      }
     }
   }
 
@@ -160,8 +172,36 @@ class _MisSolicitudesScreenState extends State<MisSolicitudesScreen> {
           Expanded(
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator())
-                : _solicitudes.isEmpty
+                : _error != null
                     ? Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(24),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.cloud_off_rounded,
+                                  size: 62,
+                                  color: cs.onSurface.withValues(alpha: 0.3)),
+                              const SizedBox(height: 14),
+                              Text(
+                                _error!,
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  color: cs.onSurface.withValues(alpha: 0.72),
+                                  fontSize: 15,
+                                ),
+                              ),
+                              const SizedBox(height: 14),
+                              ElevatedButton(
+                                onPressed: _cargarSolicitudes,
+                                child: const Text('Reintentar'),
+                              ),
+                            ],
+                          ),
+                        ),
+                      )
+                    : _solicitudes.isEmpty
+                        ? Center(
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [

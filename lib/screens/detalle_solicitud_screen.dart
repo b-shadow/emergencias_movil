@@ -10,6 +10,7 @@ import '../services/solicitud_service.dart';
 import '../services/postulacion_service.dart';
 import '../services/tracking_service.dart';
 import '../services/calificacion_service.dart';
+import '../services/offline_status_service.dart';
 import 'editar_solicitud_screen.dart';
 import 'pagos_solicitud_screen.dart';
 import '../widgets/theme_toggle_button.dart';
@@ -38,12 +39,16 @@ class _DetalleSolicitudScreenState extends State<DetalleSolicitudScreen> {
   List<Postulacion> _postulaciones = [];
   final Map<String, Map<String, dynamic>> _cotizaciones = {};
   bool _cargandoPostulaciones = false;
+  String? _mensajePostulacionesOffline;
   Map<String, dynamic>? _tracking;
   Timer? _trackingTimer;
   Timer? _wsPingTimer;
   Timer? _wsReconnectTimer;
   WebSocket? _trackingWs;
   bool _calificacionModalMostrado = false;
+  bool _calificacionYaRegistrada = false;
+  bool _calificacionPendienteSync = false;
+  bool _verificandoCalificacion = false;
   int _estrellasCalificacion = 5;
   final TextEditingController _comentarioCalificacionController = TextEditingController();
 
@@ -85,7 +90,7 @@ class _DetalleSolicitudScreenState extends State<DetalleSolicitudScreen> {
           final data = jsonDecode(event as String) as Map<String, dynamic>;
           if (!mounted) return;
           setState(() => _tracking = _normalizeTrackingPayload(data));
-          _maybePedirCalificacion();
+          _sincronizarDisponibilidadCalificacion(mostrarModalSiDisponible: true);
         } catch (_) {}
       }, onDone: () {
         _wsReconnectTimer?.cancel();
@@ -102,23 +107,64 @@ class _DetalleSolicitudScreenState extends State<DetalleSolicitudScreen> {
       final t = await _trackingService.trackingPorSolicitud(_solicitudActual.idSolicitud);
       if (!mounted) return;
       setState(() => _tracking = _normalizeTrackingPayload(t));
-      _maybePedirCalificacion();
+      await _sincronizarDisponibilidadCalificacion(mostrarModalSiDisponible: true);
     } catch (_) {}
   }
 
-  Future<void> _maybePedirCalificacion() async {
-    if (!mounted || _calificacionModalMostrado || _tracking == null) return;
+  String? _idAsignacionCalificable() {
+    if (_tracking == null) return null;
     final estado = (_tracking!['estado_orden'] ?? '').toString();
     final idAsignacion = (_tracking!['id_asignacion'] ?? '').toString();
-    if (estado != 'FINALIZADA' && estado != 'ATENDIDA') return;
-    if (idAsignacion.isEmpty) return;
+    if (estado != 'FINALIZADA' && estado != 'ATENDIDA') return null;
+    if (idAsignacion.isEmpty) return null;
+    return idAsignacion;
+  }
 
+  bool _puedeCalificar() {
+    return _idAsignacionCalificable() != null &&
+        !_calificacionYaRegistrada &&
+        !_calificacionPendienteSync;
+  }
+
+  Future<void> _sincronizarDisponibilidadCalificacion({
+    bool mostrarModalSiDisponible = false,
+  }) async {
+    if (!mounted || _verificandoCalificacion) return;
+    final idAsignacion = _idAsignacionCalificable();
+    if (idAsignacion == null) {
+      if (_calificacionYaRegistrada || _calificacionPendienteSync) {
+        setState(() {
+          _calificacionYaRegistrada = false;
+          _calificacionPendienteSync = false;
+        });
+      }
+      return;
+    }
+
+    _verificandoCalificacion = true;
     try {
       final existente = await _calificacionService.obtenerCalificacion(idAsignacion);
-      if (!mounted || existente != null) return;
-      _calificacionModalMostrado = true;
-      await _mostrarModalCalificacion(idAsignacion);
-    } catch (_) {}
+      final pendiente = await _calificacionService.hasPendingCalificacion(idAsignacion);
+      if (!mounted) return;
+      final yaRegistrada = existente != null;
+      if (_calificacionYaRegistrada != yaRegistrada ||
+          _calificacionPendienteSync != pendiente) {
+        setState(() {
+          _calificacionYaRegistrada = yaRegistrada;
+          _calificacionPendienteSync = pendiente;
+        });
+      }
+      if (!yaRegistrada &&
+          !pendiente &&
+          mostrarModalSiDisponible &&
+          !_calificacionModalMostrado) {
+        _calificacionModalMostrado = true;
+        await _mostrarModalCalificacion(idAsignacion);
+      }
+    } catch (_) {
+    } finally {
+      _verificandoCalificacion = false;
+    }
   }
 
   Future<void> _mostrarModalCalificacion(String idAsignacion) async {
@@ -171,7 +217,7 @@ class _DetalleSolicitudScreenState extends State<DetalleSolicitudScreen> {
                     final navigator = Navigator.of(context);
                     final messenger = ScaffoldMessenger.of(context);
                     try {
-                      await _calificacionService.calificarAtencion(
+                      final result = await _calificacionService.calificarAtencion(
                         idAsignacion,
                         estrellas: _estrellasCalificacion,
                         comentario: _comentarioCalificacionController.text.trim().isEmpty
@@ -179,9 +225,23 @@ class _DetalleSolicitudScreenState extends State<DetalleSolicitudScreen> {
                             : _comentarioCalificacionController.text.trim(),
                       );
                       if (!mounted) return;
+                      final queuedOffline = result['queued_offline'] == true;
+                      setState(() {
+                        _calificacionYaRegistrada = !queuedOffline;
+                        _calificacionPendienteSync = queuedOffline;
+                      });
                       navigator.pop();
+                      await OfflineStatusService.instance.notifyPendingChanged(
+                        (result['message'] ?? '').toString(),
+                      );
                       messenger.showSnackBar(
-                        const SnackBar(content: Text('Calificación registrada')),
+                        SnackBar(
+                          content: Text(
+                            queuedOffline
+                                ? (result['message'] ?? 'Calificación pendiente de sincronización').toString()
+                                : 'Calificación registrada',
+                          ),
+                        ),
                       );
                     } catch (e) {
                       if (!mounted) return;
@@ -228,22 +288,37 @@ class _DetalleSolicitudScreenState extends State<DetalleSolicitudScreen> {
   Future<void> _confirmarCancelacion() async {
     try {
       setState(() => _isLoading = true);
-      await _solicitudService.cancelarSolicitud(_solicitudActual.idSolicitud);
+      final result =
+          await _solicitudService.cancelarSolicitud(_solicitudActual.idSolicitud);
 
       if (mounted) {
+        await OfflineStatusService.instance.notifyPendingChanged(
+          (result['message'] ?? '').toString(),
+        );
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
+          SnackBar(
             content: Row(
               children: [
-                Icon(Icons.check_circle, color: Colors.white),
-                SizedBox(width: 12),
-                Text('Solicitud cancelada exitosamente'),
+                const Icon(Icons.check_circle, color: Colors.white),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    result['queued_offline'] == true
+                        ? (result['message'] ?? 'Cancelación pendiente de sincronización').toString()
+                        : 'Solicitud cancelada exitosamente',
+                  ),
+                ),
               ],
             ),
-            backgroundColor: Colors.green,
+            backgroundColor:
+                result['queued_offline'] == true ? Colors.orange : Colors.green,
           ),
         );
-        widget.onActualizar();
+        if (result['queued_offline'] != true) {
+          widget.onActualizar();
+        }
+        if (!mounted) return;
         Navigator.pop(context);
       }
     } catch (e) {
@@ -264,7 +339,7 @@ class _DetalleSolicitudScreenState extends State<DetalleSolicitudScreen> {
       setState(() => _solicitudActual = solicitud);
       await _cargarPostulaciones();
       widget.onActualizar();
-      _maybePedirCalificacion();
+      await _sincronizarDisponibilidadCalificacion();
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -286,6 +361,7 @@ class _DetalleSolicitudScreenState extends State<DetalleSolicitudScreen> {
         setState(() {
           _postulaciones = postulaciones;
           _cargandoPostulaciones = false;
+          _mensajePostulacionesOffline = null;
         });
         for (final p in postulaciones) {
           _cargarCotizacion(p.idPostulacion);
@@ -293,10 +369,21 @@ class _DetalleSolicitudScreenState extends State<DetalleSolicitudScreen> {
       }
     } catch (e) {
       if (mounted) {
-        setState(() => _cargandoPostulaciones = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error al cargar postulaciones: $e')),
-        );
+        final error = e.toString();
+        setState(() {
+          _cargandoPostulaciones = false;
+          if (error.contains('OFFLINE_NO_CACHE_POSTULACIONES')) {
+            _mensajePostulacionesOffline =
+                'Sin conexión y sin postulaciones guardadas localmente todavía.';
+          } else {
+            _mensajePostulacionesOffline = null;
+          }
+        });
+        if (!_esErrorOfflineSilencioso(error)) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error al cargar postulaciones: $e')),
+          );
+        }
       }
     }
   }
@@ -309,6 +396,13 @@ class _DetalleSolicitudScreenState extends State<DetalleSolicitudScreen> {
         _cotizaciones[idPostulacion] = cotizacion;
       });
     } catch (_) {}
+  }
+
+  bool _esErrorOfflineSilencioso(String error) {
+    return error.contains('OFFLINE_NO_CACHE_POSTULACIONES') ||
+        error.contains('OFFLINE_NO_CACHE_COTIZACION') ||
+        error.contains('SocketException') ||
+        error.contains('Failed host lookup');
   }
 
   Color _getColorEstado(String estado) {
@@ -668,6 +762,94 @@ class _DetalleSolicitudScreenState extends State<DetalleSolicitudScreen> {
                       ),
                   ],
                   const SizedBox(height: 10),
+                  if (_puedeCalificar()) ...[
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: () async {
+                          final idAsignacion = _idAsignacionCalificable();
+                          if (idAsignacion == null) return;
+                          await _mostrarModalCalificacion(idAsignacion);
+                        },
+                        icon: const Icon(Icons.star_rate_rounded),
+                        label: const Text('Calificar Atención'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFFF59E0B),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 13),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                  ] else if (_calificacionPendienteSync) ...[
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(
+                        vertical: 13,
+                        horizontal: 16,
+                      ),
+                      decoration: BoxDecoration(
+                        color: isDark ? const Color(0xFF3A2C12) : const Color(0xFFFEF3C7),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                          color: const Color(0xFFF59E0B).withValues(alpha: 0.35),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.schedule_send_rounded,
+                            color: Color(0xFFD97706),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              'Tu calificación está pendiente de sincronización',
+                              style: TextStyle(
+                                color: isDark ? Colors.white : const Color(0xFF92400E),
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                  ] else if (_calificacionYaRegistrada) ...[
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(
+                        vertical: 13,
+                        horizontal: 16,
+                      ),
+                      decoration: BoxDecoration(
+                        color: isDark ? const Color(0xFF163322) : const Color(0xFFDCFCE7),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                          color: const Color(0xFF22C55E).withValues(alpha: 0.35),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.verified_rounded,
+                            color: Color(0xFF16A34A),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              'Ya calificaste esta atención',
+                              style: TextStyle(
+                                color: isDark ? Colors.white : const Color(0xFF166534),
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                  ],
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton.icon(
@@ -722,7 +904,8 @@ class _DetalleSolicitudScreenState extends State<DetalleSolicitudScreen> {
                                 color: Color(0xFF2563EB)),
                             const SizedBox(height: 8),
                             Text(
-                              'Los talleres que respondan a tu solicitud aparecerán aquí',
+                              _mensajePostulacionesOffline ??
+                                  'Los talleres que respondan a tu solicitud aparecerán aquí',
                               textAlign: TextAlign.center,
                               style: TextStyle(
                                   color: cs.onSurface.withValues(alpha: 0.78)),

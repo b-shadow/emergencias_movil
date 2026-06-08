@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
+import '../services/offline_status_service.dart';
 import '../services/tracking_service.dart';
 
 class TrabajadorTrackingScreen extends StatefulWidget {
@@ -75,6 +76,14 @@ class _TrabajadorTrackingScreenState extends State<TrabajadorTrackingScreen> {
     final r = await _trackingService.aceptarOrden(id);
     if (!mounted) return;
     setState(() => _actual = _normalizeTracking(r));
+    await OfflineStatusService.instance.notifyPendingChanged(
+      (r['message'] ?? '').toString(),
+    );
+    if (r['queued_offline'] == true && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text((r['message'] ?? 'Acción pendiente de sincronización').toString())),
+      );
+    }
     _connectWsIfNeeded();
   }
 
@@ -84,6 +93,14 @@ class _TrabajadorTrackingScreenState extends State<TrabajadorTrackingScreen> {
     final r = await _trackingService.marcarLlegadaAuxilio(id);
     if (!mounted) return;
     setState(() => _actual = _normalizeTracking(r));
+    await OfflineStatusService.instance.notifyPendingChanged(
+      (r['message'] ?? '').toString(),
+    );
+    if (r['queued_offline'] == true && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text((r['message'] ?? 'Acción pendiente de sincronización').toString())),
+      );
+    }
     _connectWsIfNeeded();
   }
 
@@ -93,6 +110,14 @@ class _TrabajadorTrackingScreenState extends State<TrabajadorTrackingScreen> {
     final r = await _trackingService.iniciarTrasladoTaller(id);
     if (!mounted) return;
     setState(() => _actual = _normalizeTracking(r));
+    await OfflineStatusService.instance.notifyPendingChanged(
+      (r['message'] ?? '').toString(),
+    );
+    if (r['queued_offline'] == true && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text((r['message'] ?? 'Acción pendiente de sincronización').toString())),
+      );
+    }
     _connectWsIfNeeded();
   }
 
@@ -102,6 +127,14 @@ class _TrabajadorTrackingScreenState extends State<TrabajadorTrackingScreen> {
     final r = await _trackingService.marcarLlegadaTaller(id);
     if (!mounted) return;
     setState(() => _actual = _normalizeTracking(r));
+    await OfflineStatusService.instance.notifyPendingChanged(
+      (r['message'] ?? '').toString(),
+    );
+    if (r['queued_offline'] == true && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text((r['message'] ?? 'Acción pendiente de sincronización').toString())),
+      );
+    }
     await _ws?.close();
   }
 
@@ -181,6 +214,11 @@ class _TrabajadorTrackingScreenState extends State<TrabajadorTrackingScreen> {
       return;
     }
     setState(() => _actual = _normalizeTracking(r));
+    if (r['queued_offline'] == true) {
+      await OfflineStatusService.instance.notifyPendingChanged(
+        (r['message'] ?? '').toString(),
+      );
+    }
   }
 
   @override

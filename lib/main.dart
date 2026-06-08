@@ -16,9 +16,13 @@ import 'services/push_setup_stub.dart'
 import 'services/tracking_service.dart';
 import 'services/solicitud_service.dart';
 import 'services/notificacion_service.dart';
+import 'services/calificacion_service.dart';
+import 'services/offline_status_service.dart';
+import 'widgets/offline_status_overlay.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await OfflineStatusService.instance.init();
   debugPrint('[MAIN] Aplicación inicializada');
   runApp(const MyApp());
 }
@@ -56,6 +60,14 @@ class MyApp extends StatelessWidget {
             fontFamily: appFontFamily,
             useMaterial3: true,
           ),
+          builder: (context, child) {
+            return Stack(
+              children: [
+                if (child != null) child,
+                const OfflineStatusOverlay(),
+              ],
+            );
+          },
           home: const _SessionValidator(),
         );
       },
@@ -131,6 +143,8 @@ class _SessionValidatorState extends State<_SessionValidator> {
       await TrackingService().syncPendingOperations();
       await SolicitudService().syncPendingOperations();
       await NotificacionService().syncPendingOperations();
+      await CalificacionService().syncPendingOperations();
+      await OfflineStatusService.instance.syncAllPending(showResult: false);
       
       debugPrint('[SESSION] Push inicializado correctamente');
     } catch (e) {

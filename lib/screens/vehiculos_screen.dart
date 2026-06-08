@@ -47,7 +47,13 @@ class _VehiculosScreenState extends State<VehiculosScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = 'Error: $e';
+        final error = e.toString();
+        if (error.contains('OFFLINE_NO_CACHE_VEHICULOS')) {
+          _error =
+              'No hay vehículos disponibles sin conexión todavía.\nAbre esta pantalla al menos una vez con internet para guardarlos localmente.';
+        } else {
+          _error = 'Error: $e';
+        }
         _isLoading = false;
       });
     }
